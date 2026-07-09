@@ -92,10 +92,14 @@ Promoting an extension into `FAMILIES` is an explicit re-versioning of the decla
 the open.
 
 First extension: **changepoint** (capability: ADAPTATION). A hidden per-instance bijection silently
-switches to an everywhere-different bijection after 20 of 40 episodes — the switch is unsignaled;
-detecting and recovering from it *is* the capability. The capability-isolating signal is the
+switches to an everywhere-different bijection partway through 40 episodes — the switch is unsignaled;
+detecting and recovering from it *is* the capability. The switch episode is **randomized per
+instance** (16–24, drawn from the instance seed): the moment an optimizer trains against this family,
+a fixed switch episode becomes an exploitable schedule regularity — a referee's incidental
+regularities are attack surface, so they are randomized. The capability-isolating signal is the
 **post-switch slice** of the curve: whole-window AULC can be padded by strong pre-switch acquisition
-while adaptation is literally zero, so the selftest gates on `curve[20:]`. Controls, planted before
+while adaptation is literally zero, so gates use conservative shared slices valid for every instance
+(`CHANGEPOINT_PRE_SLICE`/`CHANGEPOINT_POST_SLICE`: pre = episodes below 16, post = 28 and beyond). Controls, planted before
 any measurement is trusted: the random agent must read ~0 across the switch (harness symmetry);
 fixed-step tabular-Q must visibly recover (its constant α forgets — post-switch ≈ +0.3); and a
 planted **non-adapter** (competent, then frozen at the switch) must score *worse than random*

@@ -232,15 +232,30 @@ class ParityEnv:
         return self._cur, reward, self._t >= self.rounds
 
 
+# Conservative curve slices for the changepoint family, valid for EVERY instance regardless of its
+# drawn switch episode (switch_after in 16..24): pre-slice ends before the earliest possible switch;
+# post-slice starts after the latest possible switch plus a relearn burn-in. Gate on these, never on
+# a fixed switch index — consumers (selftests, the trainer's objective) import them from here.
+CHANGEPOINT_PRE_SLICE = 16      # curve[:16]  = pre-switch for all instances
+CHANGEPOINT_POST_SLICE = 28     # curve[28:]  = post-switch (+burn-in) for all instances
+
+
 class ChangePointEnv:
     """Hidden per-seed bijection that SWITCHES to an everywhere-different bijection after
     switch_after episodes, UNSIGNALED (detecting the change is the capability). Capability:
     ADAPTATION / plasticity. The capability-isolating signal is the POST-SWITCH slice of the curve:
     whole-window AULC can be padded by strong pre-switch acquisition while adaptation is ZERO (the
-    seed's exact signature on first measurement) — so the selftest gates on curve[switch_after:]."""
-    def __init__(self, seed: int, alphabet: int = 4, rounds: int = 12, switch_after: int = 20):
+    seed's exact signature on first measurement).
+
+    The switch episode is RANDOMIZED per instance (16..24, drawn from the instance seed), not fixed:
+    the moment an optimizer trains AGAINST this family (the perpetual trainer's objective now
+    includes it), a fixed switch episode becomes an exploitable schedule regularity — the search
+    could tune surprise/forgetting parameters to expect-the-switch-at-20 instead of to detect
+    change. A referee's incidental regularities are attack surface; randomize them."""
+    def __init__(self, seed: int, alphabet: int = 4, rounds: int = 12, switch_after: int | None = None):
         rng = random.Random(seed)
-        self.alphabet, self.rounds, self.switch_after = alphabet, rounds, switch_after
+        self.alphabet, self.rounds = alphabet, rounds
+        self.switch_after = switch_after if switch_after is not None else rng.randint(16, 24)
         self.actions = list(range(alphabet))
         self.map_a = list(range(alphabet))
         rng.shuffle(self.map_a)
@@ -407,11 +422,11 @@ class NonAdapterAgent:
     updates are DISABLED after freeze_at episodes — a competent acquirer that cannot adapt. The
     instrument must DISPLAY its post-switch crash (it confidently keeps doing the OLD right thing,
     scoring WORSE than random after the switch)."""
-    def __init__(self, actions, seed: int, freeze_at: int = 20):
-        # freeze_at defaults to the switch episode: fully acquired, then frozen — maximally
-        # competent pre-switch, maximally (confidently) wrong post-switch. Freezing earlier leaves
-        # Q-ties that dilute the crash (first cut froze at 18 and the plant read -0.095, not
-        # clearly below random; the selftest caught it).
+    def __init__(self, actions, seed: int, freeze_at: int = CHANGEPOINT_PRE_SLICE):
+        # freeze_at defaults to the earliest possible switch episode: fully acquired on every
+        # instance, frozen BEFORE any instance's switch — maximally competent pre-switch, maximally
+        # (confidently) wrong on the post-slice. (History: a first cut froze at 18 against a fixed
+        # switch-at-20 and read only -0.095 — Q-ties diluted the crash; the selftest caught it.)
         self.inner = TabularQAgent(actions, seed)
         self.freeze_at = freeze_at
         self._eps_done = 0
@@ -824,7 +839,7 @@ def _selftest(verbose: bool = True) -> int:
     cp_q = measure_family(lambda a, s: TabularQAgent(a, s), "changepoint", cp_seeds, agent_seed=99)
     cp_r = measure_family(lambda a, s: RandomAgent(a, s), "changepoint", cp_seeds, agent_seed=99)
     cp_f = measure_family(lambda a, s: NonAdapterAgent(a, s), "changepoint", cp_seeds, agent_seed=99)
-    post = lambda m: sum(m["curve"][20:]) / len(m["curve"][20:])
+    post = lambda m: sum(m["curve"][CHANGEPOINT_POST_SLICE:]) / len(m["curve"][CHANGEPOINT_POST_SLICE:])
     check("changepoint: random control flat (harness symmetric across the switch)",
           abs(cp_r["aulc"]) <= 0.10 and abs(post(cp_r)) <= 0.10,
           f"aulc={cp_r['aulc']} post={post(cp_r):.3f}")
