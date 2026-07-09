@@ -20,6 +20,11 @@ The claim-licensing ledger (open-ended by design — claims scale with evidence)
     slice of the question, and claims exactly that much — a slice that can keep growing.
   * v0 defers cross-family transfer (ill-defined for tabular agents across different observation and
     action spaces); v0.5 = within-family difficulty transfer. Deferred, with this reason, not hidden.
+  * v0.6 = generality-PER-BUDGET (skill-acquisition efficiency read over the experience budget): sweep
+    the budget, report how the FLOOR moves. The load-bearing metric is the BREADTH-VS-DEPTH split —
+    does marginal budget lift the floor (breadth) or only the mean (depth)? A specialist given more
+    compute deepens its spike without ever becoming general; the axis makes that visible and
+    fail-closes (budget_to_floor is None when a capability is unlearnable at any swept budget).
   * The grid family's random floor is SAMPLED (with its own fixed seed, 200 episodes), not analytic —
     labeled as such in the report.
   * The one PERMANENT rule is the contamination-free protocol itself (fresh instances, oracle grading,
@@ -37,6 +42,8 @@ Zero dependencies. Run:
     python3 generality_atlas.py --selftest     # the gate: planted failures MUST be caught
     python3 generality_atlas.py --run          # measure the built-in baselines, print the atlas
     python3 generality_atlas.py --run --json   # machine-readable report (+ attestation if available)
+    python3 generality_atlas.py --transfer     # v0.5 within-family difficulty transfer (controls-gated)
+    python3 generality_atlas.py --efficiency   # v0.6 generality-per-budget (breadth-vs-depth split)
 """
 from __future__ import annotations
 import sys, json, random
@@ -366,10 +373,18 @@ def _normalize(ep_return: float, env) -> float:
     return (ep_return - env.random_return) / span
 
 
-def measure_family(agent_factory, family_name: str, instance_seeds, agent_seed: int) -> dict:
+def measure_family(agent_factory, family_name: str, instance_seeds, agent_seed: int,
+                   budget_mult: float = 1.0) -> dict:
     """Learning curve for one family: the agent learns each FRESH instance from scratch; per-episode
-    normalized scores average across instances. Metrics: jumpstart / AULC / final competence."""
-    ctor, capability, episodes = FAMILIES[family_name]
+    normalized scores average across instances. Metrics: jumpstart / AULC / final competence.
+
+    budget_mult scales the per-family episode budget (for the generality-per-budget axis). The AULC is
+    the average competence DISPLAYED within a budget of `episodes` episodes — so at higher budget more
+    of a learner's window is converged and its AULC rises, while a non-learner's stays flat. That is
+    exactly skill-acquisition efficiency read over the budget; comparing AULC across budgets is
+    comparing 'competence shown within B episodes' for different B, stated plainly, not hidden."""
+    ctor, capability, base_episodes = FAMILIES[family_name]
+    episodes = max(3, round(base_episodes * budget_mult))
     curves = []
     for idx, s in enumerate(instance_seeds):
         env = ctor(s)
@@ -392,27 +407,102 @@ def measure_family(agent_factory, family_name: str, instance_seeds, agent_seed: 
 
 
 def measure(agent_factory, master_seed: int = 20260709, n_instances: int = 8,
-            families=None) -> dict:
+            families=None, budget_mult: float = 1.0) -> dict:
     """The atlas run: every declared family × fresh instance seeds derived from the master seed.
-    Aggregate = the profile + the GENERALITY FLOOR (min AULC across families). Never a bare mean."""
+    Aggregate = the profile + the GENERALITY FLOOR (min AULC across families). Never a bare mean.
+
+    budget_mult (default 1.0) scales every family's episode budget uniformly; the instance seeds are
+    derived from master_seed ALONE, so budget is the only thing that changes across levels — a clean
+    controlled comparison for the generality-per-budget axis."""
     families = families or list(FAMILIES)
     rng = random.Random(master_seed)
     profile, scope = {}, []
     instance_seeds = {f: [rng.randrange(10**9) for _ in range(n_instances)] for f in families}
     for f in families:
-        profile[f] = measure_family(agent_factory, f, instance_seeds[f], agent_seed=master_seed + 13)
+        profile[f] = measure_family(agent_factory, f, instance_seeds[f], agent_seed=master_seed + 13,
+                                     budget_mult=budget_mult)
         scope += [f"{f}:{s}" for s in instance_seeds[f]]
     aulcs = {f: profile[f]["aulc"] for f in families}
+    total_episodes = sum(profile[f]["episodes"] for f in families)
     return {
         "master_seed": master_seed,
         "declared_families": families,
+        "budget_mult": budget_mult,
+        "total_episodes": total_episodes,
         "profile": profile,
         "generality_floor": min(aulcs.values()),
         "floor_family": min(aulcs, key=aulcs.get),
+        "generality_mean": round(sum(aulcs.values()) / len(aulcs), 4),
         "scope_cells": scope,
         "boundary": ("Scores are complete relative to THIS declared universe (five toy families, "
                      "these budgets, these seeds) — nothing beyond it is licensed. The floor is the "
                      "headline; a high mean with a low floor is narrowness, not generality."),
+    }
+
+
+# ────────────────────────────────────────────────────────────────────────────────────────────────────
+# v0.6 — GENERALITY-PER-BUDGET (skill-acquisition efficiency read over the experience budget)
+#
+# Generality (Chollet) is not skill but skill-acquisition EFFICIENCY — how much competence you gain per
+# unit of experience on novel tasks. The v0.5 atlas reports a floor at ONE budget; this axis sweeps the
+# budget and reports how the floor moves. The instrument's headline stays the FLOOR, so the primary
+# object here is the floor-vs-budget FUNCTION (the scalar summaries below are lossy projections of it,
+# named as such).
+#
+# The load-bearing diagnostic is BREADTH-VS-DEPTH: when you spend marginal budget, does the FLOOR rise
+# (the weakest family improves = breadth) or only the MEAN (the strong families get stronger = depth)?
+# A true generalist lifts its floor; a specialist given more compute just deepens its spike. So this is
+# an assurance axis, not a bare metric: it catches a 'more compute -> more general' claim that is really
+# 'more compute -> narrower but deeper'. breadth_ratio = Δfloor / Δmean across the swept budget; ~1 means
+# marginal budget bought breadth, ~0 means it bought only depth. If the mean does not move it is
+# reported as None ('undefined, mean flat'), never a fabricated number.
+DEFAULT_BUDGETS = (0.5, 1.0, 2.0)
+
+
+def measure_efficiency(agent_factory, budgets=DEFAULT_BUDGETS, master_seed: int = 20260709,
+                       n_instances: int = 8, families=None, target_floor: float = 0.30) -> dict:
+    """Sweep the experience budget and report generality-EFFICIENCY. Primary object: the floor-vs-budget
+    curve. Scalar projections (each stated as lossy): budget_to_floor (episodes to reach a target FLOOR,
+    or None if never reached within the swept budgets = fail-closed, never fabricated) and breadth_ratio
+    (Δfloor / Δmean, the breadth-vs-depth split)."""
+    budgets = sorted(budgets)
+    runs = [measure(agent_factory, master_seed=master_seed, n_instances=n_instances,
+                    families=families, budget_mult=b) for b in budgets]
+    floor_curve = [{"budget_mult": r["budget_mult"], "total_episodes": r["total_episodes"],
+                    "floor": r["generality_floor"], "floor_family": r["floor_family"],
+                    "mean": r["generality_mean"]} for r in runs]
+
+    # budget_to_floor: smallest total_episodes at which the FLOOR first reaches the target. None (not a
+    # zero, not the max) when the target is never reached within the swept budgets — fail-closed.
+    reached = [p for p in floor_curve if p["floor"] >= target_floor]
+    budget_to_floor = min(p["total_episodes"] for p in reached) if reached else None
+
+    # breadth_ratio: how much of the marginal budget went to BREADTH (floor) vs DEPTH (mean), from the
+    # smallest to the largest swept budget. It is only interpretable when the agent actually GAINED
+    # overall competence with more budget — dividing by a ~zero mean-change gives garbage (the narrow
+    # specialist saturated early: d_mean 0.01 would yield a wild ratio). So the ratio is defined only
+    # when d_mean exceeds MEAN_EPS, and is None ('overall competence flat — no breadth/depth split to
+    # report') otherwise. That is fail-closed, not a fabricated number.
+    MEAN_EPS = 0.05
+    lo, hi = floor_curve[0], floor_curve[-1]
+    d_floor, d_mean = hi["floor"] - lo["floor"], hi["mean"] - lo["mean"]
+    breadth_ratio = round(d_floor / d_mean, 3) if d_mean > MEAN_EPS else None
+
+    return {
+        "master_seed": master_seed,
+        "swept_budgets": budgets,
+        "target_floor": target_floor,
+        "floor_curve": floor_curve,
+        "d_floor": round(d_floor, 4),
+        "d_mean": round(d_mean, 4),
+        "breadth_ratio": breadth_ratio,
+        "budget_to_floor": budget_to_floor,
+        "boundary": ("Generality-efficiency is measured ONLY over the swept budgets and this declared "
+                     "universe. budget_to_floor is None when the target floor is never reached here — "
+                     "that is fail-closed, not a zero. breadth_ratio ~1 = marginal budget bought "
+                     "breadth (floor rose); ~0 = it bought only depth (mean rose, floor flat); None = "
+                     "mean did not move, ratio undefined. AULC at budget B is competence shown within "
+                     "B episodes — comparing across B is comparing different windows, stated plainly."),
     }
 
 
@@ -611,6 +701,40 @@ def _selftest(verbose: bool = True) -> int:
     t2 = measure_transfer(lambda a, s: TabularQAgent(a, s), "parity", master_seed=55)
     check("transfer reproducibility (same seed => identical)", t1 == t2)
 
+    # 8) v0.6 GENERALITY-PER-BUDGET axis. The axis must (a) DETECT BREADTH-buying: on a universe the
+    #    learner can cover (the four non-memory families) tabular-Q's FLOOR rises with budget nearly as
+    #    fast as its mean (breadth_ratio ~1) and the target floor becomes reachable; (b) DETECT
+    #    DEPTH-only + FAIL-CLOSE: the SAME learner on the full universe gains overall competence (mean
+    #    up) but its floor is memory-pinned, so breadth_ratio is low and budget_to_floor is None — more
+    #    budget did NOT buy generality; (c) not fabricate a split when there was no gain: the saturated
+    #    specialist and the random control gained nothing overall, so breadth_ratio is None, and the
+    #    specialist's floor stays negative at every budget (never general regardless of compute).
+    learnable = ["bandit", "gridnav", "sequence", "parity"]
+    eff_breadth = measure_efficiency(lambda a, s: TabularQAgent(a, s), families=learnable, n_instances=6)
+    check("budget axis DETECTS BREADTH (floor rises with budget on a coverable universe)",
+          eff_breadth["d_floor"] > 0.10 and eff_breadth["breadth_ratio"] is not None
+          and eff_breadth["breadth_ratio"] >= 0.6,
+          f"d_floor={eff_breadth['d_floor']} breadth_ratio={eff_breadth['breadth_ratio']}")
+    check("budget axis: target floor becomes REACHABLE for the covering learner",
+          eff_breadth["budget_to_floor"] is not None, f"budget_to_floor={eff_breadth['budget_to_floor']}")
+    eff_depth = measure_efficiency(lambda a, s: TabularQAgent(a, s), n_instances=6)
+    check("budget axis DETECTS DEPTH-only (mean up, floor memory-pinned => low breadth_ratio)",
+          eff_depth["breadth_ratio"] is not None and eff_depth["breadth_ratio"] <= 0.5,
+          f"breadth_ratio={eff_depth['breadth_ratio']} d_mean={eff_depth['d_mean']}")
+    check("budget axis FAIL-CLOSED (unlearnable capability => budget_to_floor None, not a low number)",
+          eff_depth["budget_to_floor"] is None, f"budget_to_floor={eff_depth['budget_to_floor']}")
+    eff_narrow = measure_efficiency(lambda a, s: BanditOnlyAgent(a, s), n_instances=6)
+    check("budget axis: specialist NEVER general regardless of budget (floor stays <=0 at max budget)",
+          eff_narrow["floor_curve"][-1]["floor"] <= 0.05,
+          f"floor@maxbudget={eff_narrow['floor_curve'][-1]['floor']}")
+    check("budget axis: no fabricated split when overall competence is flat (breadth_ratio None)",
+          eff_narrow["breadth_ratio"] is None, f"breadth_ratio={eff_narrow['breadth_ratio']}")
+    eff_rnd = measure_efficiency(lambda a, s: RandomAgent(a, s), n_instances=6)
+    check("budget axis: random control gains nothing => breadth_ratio undefined (None)",
+          eff_rnd["breadth_ratio"] is None, f"breadth_ratio={eff_rnd['breadth_ratio']} d_mean={eff_rnd['d_mean']}")
+    e1 = measure_efficiency(lambda a, s: TabularQAgent(a, s), families=learnable, n_instances=6)
+    check("budget axis reproducibility (same seed => identical)", e1 == eff_breadth)
+
     # 7) certificate path (honest either way)
     if _HAS_ATTEST:
         doc = attest_run(rnd)
@@ -623,6 +747,20 @@ def _selftest(verbose: bool = True) -> int:
         print(f"\n  {'ALL PASS' if not fails else str(len(fails)) + ' FAILURE(S): ' + ', '.join(fails)}",
               file=sys.stderr)
     return len(fails)
+
+
+def _print_efficiency(eff: dict, label: str):
+    print(f"\n=== generality-per-budget — {label} ===")
+    for p in eff["floor_curve"]:
+        print(f"  budget x{p['budget_mult']:<4} ({p['total_episodes']:>4} eps)  "
+              f"floor={p['floor']:+.3f} ({p['floor_family']:<8})  mean={p['mean']:+.3f}")
+    br = eff["breadth_ratio"]
+    br_s = f"{br:.2f}" if br is not None else "None (overall competence flat — undefined)"
+    b2f = eff["budget_to_floor"]
+    b2f_s = f"{b2f} eps" if b2f is not None else f"None (floor never reached {eff['target_floor']} — fail-closed)"
+    print(f"  Δfloor={eff['d_floor']:+.3f}  Δmean={eff['d_mean']:+.3f}  breadth_ratio={br_s}")
+    print(f"  budget_to_floor(>={eff['target_floor']}) = {b2f_s}")
+    print(f"  boundary: {eff['boundary']}")
 
 
 def _print_atlas(report: dict, label: str):
@@ -655,6 +793,21 @@ if __name__ == "__main__":
             r = measure_transfer(factory, fam)
             print(f"  {fam:<8} easy->hard  jumpstart_delta={r['jumpstart_delta']:+.3f}  "
                   f"aulc_delta={r['aulc_delta']:+.3f}   (scratch AULC={r['scratch']['aulc']:.3f})")
+        sys.exit(0)
+    if "--efficiency" in sys.argv:
+        # The SAME learner shown two ways: on a universe it can cover (budget buys BREADTH — the floor
+        # rises) and on the full universe with an unlearnable capability (budget buys DEPTH only — the
+        # floor is memory-pinned, budget_to_floor fail-closes to None). Plus the specialist (never
+        # general at any budget) and the random control (no gain => split undefined).
+        learnable = ["bandit", "gridnav", "sequence", "parity"]
+        _print_efficiency(measure_efficiency(lambda a, s: TabularQAgent(a, s), families=learnable),
+                          "tabular-Q on a COVERABLE universe (budget buys breadth)")
+        _print_efficiency(measure_efficiency(lambda a, s: TabularQAgent(a, s)),
+                          "tabular-Q on the FULL universe (memory unlearnable -> budget buys depth only)")
+        _print_efficiency(measure_efficiency(lambda a, s: BanditOnlyAgent(a, s)),
+                          "bandit-only specialist (never general regardless of budget)")
+        _print_efficiency(measure_efficiency(lambda a, s: RandomAgent(a, s)),
+                          "random control (no competence gain -> split undefined)")
         sys.exit(0)
     if "--run" in sys.argv:
         reports = {

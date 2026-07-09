@@ -63,11 +63,33 @@ are disjoint across difficulties, and genuinely NEGATIVE where stale values plus
 exploration schedule interfere on harder variants. Negative transfer is reported as measured, never
 hidden.
 
+## v0.6 — generality-per-budget (does compute buy breadth or depth?)
+`measure_efficiency` sweeps the experience budget (×0.5 / ×1 / ×2) and reports how the **floor** moves,
+because generality (Chollet) is skill-acquisition *efficiency*, not accumulated skill. The load-bearing
+metric is the **breadth-vs-depth split**: when you spend marginal budget, does the FLOOR rise (the
+weakest family improves = breadth) or only the MEAN (the strong families get stronger = depth)?
+
+- `breadth_ratio` = Δfloor / Δmean across the sweep. ~1 = budget bought breadth; ~0 = budget bought only
+  depth. It is reported **only when overall competence actually rose** (Δmean past a threshold); a
+  saturated or non-learning agent gained nothing, so the split is `None` ("undefined"), never a
+  fabricated number.
+- `budget_to_floor` = the experience needed for the floor to reach a target (default 0.30), or `None`
+  when it is never reached within the swept budgets — **fail-closed, not a zero.**
+
+This makes budget an *assurance* axis, not a bare metric: it catches a "more compute → more general"
+claim that is really "more compute → narrower but deeper." The standing demonstration is the **same**
+tabular-Q learner shown two ways — on a universe it can cover (the four non-memory families) budget buys
+**breadth** (floor rises with the mean, `breadth_ratio` ≈ 0.9, target floor reached); on the **full**
+universe, where the memory capability is structurally unlearnable for it, the same budget buys **depth
+only** (mean rises, floor memory-pinned near zero, `breadth_ratio` ≈ 0.2, `budget_to_floor` = `None`).
+More compute did not make it general — and the axis says so.
+
 ## Run (zero dependencies — Python standard library)
 ```
 python3 generality_atlas.py --selftest      # the gate; must pass before anything is measured
 python3 generality_atlas.py --run           # the atlas for the built-in baselines
 python3 generality_atlas.py --transfer      # controls-gated difficulty-transfer measurements
+python3 generality_atlas.py --efficiency    # generality-per-budget: the breadth-vs-depth split
 python3 generality_atlas.py --run --json    # machine-readable report (+ attestation if available)
 ```
 
@@ -86,7 +108,9 @@ Any agent that speaks the protocol can be measured: `act(obs) -> action`,
    is the standing demonstration (respectable mean, negative floor).
 4. **v0 defers transfer** — cross-family transfer is ill-defined for tabular agents (different
    observation/action spaces). Deferred with this reason, not hidden; v0.5 = within-family difficulty
-   transfer, and transfer is exactly where the interesting generality evidence will live.
+   transfer, and transfer is exactly where the interesting generality evidence will live. v0.6 =
+   generality-per-budget (the breadth-vs-depth split), which fail-closes `budget_to_floor` to `None`
+   when a capability is unlearnable at any swept budget rather than reporting a flattering low number.
 5. **The contamination-free protocol is the one permanent rule** — fresh instances per run, oracle
    grading, no judge in the verdict path. It is permanent because it protects measurement validity,
    not because it limits ambition: whatever this project one day claims, it will be able to prove it
