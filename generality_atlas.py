@@ -238,6 +238,7 @@ class ParityEnv:
 # a fixed switch index — consumers (selftests, the trainer's objective) import them from here.
 CHANGEPOINT_PRE_SLICE = 16      # curve[:16]  = pre-switch for all instances
 CHANGEPOINT_POST_SLICE = 28     # curve[28:]  = post-switch (+burn-in) for all instances
+CHANGEPOINT_SUSTAINED_SLICE = 40  # curve[40:] of the sustained family = past >= 3 switches, all draws
 
 
 class ChangePointEnv:
@@ -285,6 +286,35 @@ class ChangePointEnv:
         return self._cur, reward, self._t >= self.rounds
 
 
+class SustainedChangeEnv(ChangePointEnv):
+    """Regime re-randomized every switch_every episodes (drawn 10..12 per instance — jittered so an
+    optimizer cannot learn the schedule; >= 10 keeps a relearn window) over 60 episodes. Capability:
+    SUSTAINED ADAPTATION (plasticity that survives REPEATED change, a different capability from
+    single-shock adaptation: a mechanism can pass one switch and still collapse over six — measured).
+    The capability-isolating signal is the LATE slice, curve[40:] (past >= 3 switches for every
+    draw): steady-state readaptation, not first-shock recovery."""
+    def __init__(self, seed: int, alphabet: int = 4, rounds: int = 12):
+        super().__init__(seed, alphabet, rounds, switch_after=10**9)
+        self.switch_every = random.Random(seed + 31).randint(10, 12)
+        self._maprng = random.Random(seed + 999)
+        self.cur_map = list(self.map_a)
+
+    def reset(self):
+        obs = super().reset()
+        if self._episodes > 1 and (self._episodes - 1) % self.switch_every == 0:
+            old = list(self.cur_map)
+            while True:                                    # each regime differs EVERYWHERE from the last
+                m = list(range(self.alphabet))
+                self._maprng.shuffle(m)
+                if all(m[i] != old[i] for i in range(self.alphabet)):
+                    break
+            self.cur_map = m
+        return obs
+
+    def _mapping(self):
+        return self.cur_map
+
+
 # family registry: name -> (constructor, capability tag, episodes budget)
 # Budget calibration is part of the instrument's validity (learned the hard way, 2026-07-09): the
 # memory family's original 25-episode budget was information-theoretically too tight — 5 cues x 5
@@ -306,6 +336,7 @@ FAMILIES = {
 # deliberate re-versioning of the universe, made in the open, not a side effect of adding code.
 EXTENSION_FAMILIES = {
     "changepoint": (ChangePointEnv, "adaptation-to-change", 40),
+    "changepoint_sustained": (SustainedChangeEnv, "sustained-adaptation", 60),
 }
 
 
@@ -441,6 +472,36 @@ class NonAdapterAgent:
     def episode_end(self):
         self._eps_done += 1
         self.inner.episode_end()
+
+
+class RunningMeanQAgent:
+    """PLANTED FAILURE for the changepoint_sustained family: per-key RUNNING-MEAN values (alpha=1/n)
+    — the plasticity-loss class itself. Means that never forget deadlock under repeated regime
+    change; the instrument must display its late-slice sitting at-or-below random while a fixed-step
+    learner holds a positive steady state."""
+    def __init__(self, actions, seed: int, eps=0.35, eps_decay=0.93, eps_min=0.02):
+        self.actions = list(actions)
+        self._rng = random.Random(seed)
+        self.eps, self.eps_decay, self.eps_min = eps, eps_decay, eps_min
+        self.q = {}
+
+    def _s(self, obs, a):
+        return self.q.setdefault((obs, a), [0, 0.0])
+
+    def act(self, obs):
+        if self._rng.random() < self.eps:
+            return self._rng.choice(self.actions)
+        vals = [self._s(obs, a)[1] + 0.3 / (1 + self._s(obs, a)[0]) for a in self.actions]
+        best = max(vals)
+        return self.actions[self._rng.choice([i for i, v in enumerate(vals) if v == best])]
+
+    def update(self, obs, action, reward, next_obs, done):
+        st = self._s(obs, action)
+        st[0] += 1
+        st[1] += (reward - st[1]) / st[0]
+
+    def episode_end(self):
+        self.eps = max(self.eps_min, self.eps * self.eps_decay)
 
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -852,6 +913,26 @@ def _selftest(verbose: bool = True) -> int:
           post(cp_q) - post(cp_f) >= 0.20, f"gap={post(cp_q) - post(cp_f):.3f}")
     cp_q2 = measure_family(lambda a, s: TabularQAgent(a, s), "changepoint", cp_seeds, agent_seed=99)
     check("changepoint reproducibility (same seeds => identical)", cp_q == cp_q2)
+
+    # 10) EXTENSION family: changepoint_sustained (STEADY-STATE plasticity — a different capability
+    #     from single-shock adaptation; a mechanism can pass one switch and still collapse over six).
+    #     Signal = the LATE slice (past >= 3 switches for every cadence draw). The planted failure is
+    #     the plasticity-loss class ITSELF: running-mean values (alpha=1/n) that never forget.
+    late = lambda m: (sum(m["curve"][CHANGEPOINT_SUSTAINED_SLICE:])
+                      / len(m["curve"][CHANGEPOINT_SUSTAINED_SLICE:]))
+    su_q = measure_family(lambda a, s: TabularQAgent(a, s), "changepoint_sustained", cp_seeds, agent_seed=99)
+    su_r = measure_family(lambda a, s: RandomAgent(a, s), "changepoint_sustained", cp_seeds, agent_seed=99)
+    su_p = measure_family(lambda a, s: RunningMeanQAgent(a, s), "changepoint_sustained", cp_seeds, agent_seed=99)
+    check("sustained: random control flat across repeated switches", abs(late(su_r)) <= 0.10,
+          f"late={late(su_r):+.3f}")
+    check("sustained: fixed-step tabular-Q holds a positive STEADY STATE", late(su_q) >= 0.10,
+          f"late={late(su_q):+.3f}")
+    check("sustained: planted RUNNING-MEAN learner displayed (late slice at-or-below random)",
+          late(su_p) <= 0.0, f"late={late(su_p):+.3f}")
+    check("sustained: adapter vs plasticity-loss separation unmistakable (>= 0.15)",
+          late(su_q) - late(su_p) >= 0.15, f"gap={late(su_q) - late(su_p):.3f}")
+    su_q2 = measure_family(lambda a, s: TabularQAgent(a, s), "changepoint_sustained", cp_seeds, agent_seed=99)
+    check("sustained reproducibility (same seeds => identical)", su_q == su_q2)
 
     # 7) certificate path (honest either way)
     if _HAS_ATTEST:

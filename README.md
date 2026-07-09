@@ -108,6 +108,15 @@ agent's acquisition strength says nothing about its adaptation — a running-mea
 every stationary family can sit at random on the post-switch slice, because means that never forget
 and exploration that has decayed to nothing are exactly the wrong equipment for a changed world.
 
+Second extension: **changepoint_sustained** (capability: SUSTAINED ADAPTATION — a different
+capability from single-shock adaptation, and the distinction is measured, not asserted: a mechanism
+can recover from one switch and still collapse over six). The regime re-randomizes every 10–12
+episodes (cadence drawn per instance — jittered so an optimizer cannot learn the schedule) across 60
+episodes; the signal is the **late slice** (`CHANGEPOINT_SUSTAINED_SLICE`, past ≥3 switches for every
+draw): steady-state readaptation. The planted failure is the plasticity-loss class itself — a
+running-mean learner (α=1/n) whose never-forgetting values deadlock under repeated change (late
+slice below random, −0.07, vs fixed-step tabular-Q's steady +0.22).
+
 ## Run (zero dependencies — Python standard library)
 ```
 python3 generality_atlas.py --selftest      # the gate; must pass before anything is measured
