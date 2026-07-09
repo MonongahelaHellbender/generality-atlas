@@ -232,6 +232,44 @@ class ParityEnv:
         return self._cur, reward, self._t >= self.rounds
 
 
+class ChangePointEnv:
+    """Hidden per-seed bijection that SWITCHES to an everywhere-different bijection after
+    switch_after episodes, UNSIGNALED (detecting the change is the capability). Capability:
+    ADAPTATION / plasticity. The capability-isolating signal is the POST-SWITCH slice of the curve:
+    whole-window AULC can be padded by strong pre-switch acquisition while adaptation is ZERO (the
+    seed's exact signature on first measurement) — so the selftest gates on curve[switch_after:]."""
+    def __init__(self, seed: int, alphabet: int = 4, rounds: int = 12, switch_after: int = 20):
+        rng = random.Random(seed)
+        self.alphabet, self.rounds, self.switch_after = alphabet, rounds, switch_after
+        self.actions = list(range(alphabet))
+        self.map_a = list(range(alphabet))
+        rng.shuffle(self.map_a)
+        while True:                                        # B differs from A on EVERY symbol
+            self.map_b = list(range(alphabet))
+            rng.shuffle(self.map_b)
+            if all(self.map_b[i] != self.map_a[i] for i in range(alphabet)):
+                break
+        self.oracle_return = float(rounds)
+        self.random_return = rounds / alphabet
+        self._rng = random.Random(seed + 7)
+        self._episodes = 0
+
+    def _mapping(self):
+        return self.map_a if self._episodes <= self.switch_after else self.map_b
+
+    def reset(self):
+        self._episodes += 1
+        self._t = 0
+        self._cur = self._rng.randrange(self.alphabet)
+        return self._cur
+
+    def step(self, action):
+        reward = 1.0 if action == self._mapping()[self._cur] else 0.0
+        self._t += 1
+        self._cur = self._rng.randrange(self.alphabet)
+        return self._cur, reward, self._t >= self.rounds
+
+
 # family registry: name -> (constructor, capability tag, episodes budget)
 # Budget calibration is part of the instrument's validity (learned the hard way, 2026-07-09): the
 # memory family's original 25-episode budget was information-theoretically too tight — 5 cues x 5
@@ -246,6 +284,22 @@ FAMILIES = {
     "memory":   (MemoryRecallEnv, "memory",                 60),
     "parity":   (ParityEnv,       "systematic-computation", 40),
 }
+
+# EXTENSION families: built, controlled, and measurable via measure(families=[...]) — but NOT yet in
+# the default declared universe, because adding a family re-baselines EVERY existing number (the floor
+# is a min; a new weakest family rewrites the headline). Promoting an extension into FAMILIES is a
+# deliberate re-versioning of the universe, made in the open, not a side effect of adding code.
+EXTENSION_FAMILIES = {
+    "changepoint": (ChangePointEnv, "adaptation-to-change", 40),
+}
+
+
+def _family_spec(name):
+    if name in FAMILIES:
+        return FAMILIES[name]
+    if name in EXTENSION_FAMILIES:
+        return EXTENSION_FAMILIES[name]
+    raise KeyError(f"unknown family {name!r} (not in FAMILIES or EXTENSION_FAMILIES)")
 
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -339,13 +393,39 @@ def pretrain_frozen(family_name: str, leaked_seed: int, master_seed: int, budget
     finding: cross-instance memorization structurally cannot pay here, because instance identity is
     not recoverable from observations — so the honest minimal contamination model is a single leaked
     instance, memorized cold."""
-    ctor, _, episodes = FAMILIES[family_name]
+    ctor, _, episodes = _family_spec(family_name)
     env = ctor(leaked_seed)
     agent = TabularQAgent(env.actions, seed=master_seed)
     for _ in range(episodes * budget_mult):
         _run_episode(env, agent)
         agent.episode_end()
     return agent.q
+
+
+class NonAdapterAgent:
+    """PLANTED FAILURE for the changepoint extension family: learns normally (wrapped TabularQ), then
+    updates are DISABLED after freeze_at episodes — a competent acquirer that cannot adapt. The
+    instrument must DISPLAY its post-switch crash (it confidently keeps doing the OLD right thing,
+    scoring WORSE than random after the switch)."""
+    def __init__(self, actions, seed: int, freeze_at: int = 20):
+        # freeze_at defaults to the switch episode: fully acquired, then frozen — maximally
+        # competent pre-switch, maximally (confidently) wrong post-switch. Freezing earlier leaves
+        # Q-ties that dilute the crash (first cut froze at 18 and the plant read -0.095, not
+        # clearly below random; the selftest caught it).
+        self.inner = TabularQAgent(actions, seed)
+        self.freeze_at = freeze_at
+        self._eps_done = 0
+
+    def act(self, obs):
+        return self.inner.act(obs)
+
+    def update(self, obs, action, reward, next_obs, done):
+        if self._eps_done < self.freeze_at:
+            self.inner.update(obs, action, reward, next_obs, done)
+
+    def episode_end(self):
+        self._eps_done += 1
+        self.inner.episode_end()
 
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -383,7 +463,7 @@ def measure_family(agent_factory, family_name: str, instance_seeds, agent_seed: 
     of a learner's window is converged and its AULC rises, while a non-learner's stays flat. That is
     exactly skill-acquisition efficiency read over the budget; comparing AULC across budgets is
     comparing 'competence shown within B episodes' for different B, stated plainly, not hidden."""
-    ctor, capability, base_episodes = FAMILIES[family_name]
+    ctor, capability, base_episodes = _family_spec(family_name)
     episodes = max(3, round(base_episodes * budget_mult))
     curves = []
     for idx, s in enumerate(instance_seeds):
@@ -734,6 +814,29 @@ def _selftest(verbose: bool = True) -> int:
           eff_rnd["breadth_ratio"] is None, f"breadth_ratio={eff_rnd['breadth_ratio']} d_mean={eff_rnd['d_mean']}")
     e1 = measure_efficiency(lambda a, s: TabularQAgent(a, s), families=learnable, n_instances=6)
     check("budget axis reproducibility (same seed => identical)", e1 == eff_breadth)
+
+    # 9) EXTENSION family: changepoint (adaptation-to-unsignaled-change). Not yet in the default
+    #    universe (promoting it re-baselines every number — a deliberate re-versioning, her call);
+    #    but it must pass the same instrument-validity discipline before ANY measurement with it is
+    #    trusted. The capability-isolating signal is the POST-SWITCH slice: whole-window AULC can be
+    #    padded by pre-switch acquisition while adaptation is ZERO.
+    cp_seeds = [random.Random(4242).randrange(10**9) for _ in range(6)]
+    cp_q = measure_family(lambda a, s: TabularQAgent(a, s), "changepoint", cp_seeds, agent_seed=99)
+    cp_r = measure_family(lambda a, s: RandomAgent(a, s), "changepoint", cp_seeds, agent_seed=99)
+    cp_f = measure_family(lambda a, s: NonAdapterAgent(a, s), "changepoint", cp_seeds, agent_seed=99)
+    post = lambda m: sum(m["curve"][20:]) / len(m["curve"][20:])
+    check("changepoint: random control flat (harness symmetric across the switch)",
+          abs(cp_r["aulc"]) <= 0.10 and abs(post(cp_r)) <= 0.10,
+          f"aulc={cp_r['aulc']} post={post(cp_r):.3f}")
+    check("changepoint: positive control ADAPTS (fixed-alpha tabular-Q recovers post-switch)",
+          cp_q["aulc"] >= 0.28 and post(cp_q) >= 0.12,
+          f"aulc={cp_q['aulc']} post={post(cp_q):.3f}")
+    check("changepoint: planted NON-ADAPTER displayed (post-switch WORSE than random)",
+          post(cp_f) <= -0.10, f"post={post(cp_f):.3f}")
+    check("changepoint: adapter vs non-adapter separation is unmistakable (>= 0.2 post-switch)",
+          post(cp_q) - post(cp_f) >= 0.20, f"gap={post(cp_q) - post(cp_f):.3f}")
+    cp_q2 = measure_family(lambda a, s: TabularQAgent(a, s), "changepoint", cp_seeds, agent_seed=99)
+    check("changepoint reproducibility (same seeds => identical)", cp_q == cp_q2)
 
     # 7) certificate path (honest either way)
     if _HAS_ATTEST:

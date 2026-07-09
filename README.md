@@ -84,6 +84,26 @@ universe, where the memory capability is structurally unlearnable for it, the sa
 only** (mean rises, floor memory-pinned near zero, `breadth_ratio` ≈ 0.2, `budget_to_floor` = `None`).
 More compute did not make it general — and the axis says so.
 
+## v0.7 — extension families (the universe grows deliberately, not accidentally)
+`EXTENSION_FAMILIES` holds families that are **built, controlled, and measurable** (via
+`measure(families=["changepoint"])`) but not yet in the default universe — because adding a family
+re-baselines every existing number (the floor is a min; a new weakest family rewrites the headline).
+Promoting an extension into `FAMILIES` is an explicit re-versioning of the declared universe, made in
+the open.
+
+First extension: **changepoint** (capability: ADAPTATION). A hidden per-instance bijection silently
+switches to an everywhere-different bijection after 20 of 40 episodes — the switch is unsignaled;
+detecting and recovering from it *is* the capability. The capability-isolating signal is the
+**post-switch slice** of the curve: whole-window AULC can be padded by strong pre-switch acquisition
+while adaptation is literally zero, so the selftest gates on `curve[20:]`. Controls, planted before
+any measurement is trusted: the random agent must read ~0 across the switch (harness symmetry);
+fixed-step tabular-Q must visibly recover (its constant α forgets — post-switch ≈ +0.3); and a
+planted **non-adapter** (competent, then frozen at the switch) must score *worse than random*
+post-switch (≈ −0.16 — it confidently does the old right thing). First finding worth stating: an
+agent's acquisition strength says nothing about its adaptation — a running-mean learner that tops
+every stationary family can sit at random on the post-switch slice, because means that never forget
+and exploration that has decayed to nothing are exactly the wrong equipment for a changed world.
+
 ## Run (zero dependencies — Python standard library)
 ```
 python3 generality_atlas.py --selftest      # the gate; must pass before anything is measured
