@@ -7,14 +7,15 @@
 This is an instrument, not an intelligence. It never claims to measure AGI (the one formal definition
 of general intelligence, Legg–Hutter universal intelligence, is provably uncomputable — that is a named
 barrier, not an engineering obstacle). What it measures, exactly: how fast an agent's performance
-climbs on task instances it has **never seen**, within a declared experience budget, across five
+climbs on task instances it has **never seen**, within a declared experience budget, across seven
 diagnostic families that each isolate one capability. Nothing beyond that declared universe is licensed.
 
 ## The design (reuse, not invention)
 - **Diagnostic families** (bsuite's move — each isolates ONE capability): k-armed bandits
   (exploration) · seeded grid mazes, BFS-verified solvable (credit assignment) · hidden symbol
   bijections (rule induction) · cue/distractor/recall episodes (memory) · 4-bit parity (systematic
-  computation).
+  computation) · unsignaled mid-stream rule switches (adaptation) · repeated regime changes at a
+  jittered cadence (sustained adaptation).
 - **Procedural freshness** (Procgen's move): every instance is generated from a seed at run time.
   There is nothing to memorize; a memorizer is structurally reduced to its true learning ability.
 - **Metric names from the transfer-RL literature** (arXiv:2009.07888): jumpstart, AULC (area under
@@ -25,7 +26,7 @@ diagnostic families that each isolate one capability. Nothing beyond that declar
   instead of ~0).
 - **The aggregate is the profile + the GENERALITY FLOOR** — the minimum AULC across families, never a
   bare mean. A high mean with a low floor is narrowness, not generality, and the built-in narrow agent
-  demonstrates exactly that signature (bandit spike 0.82, floor negative).
+  demonstrates exactly that signature (bandit spike 0.84, floor negative).
 
 ## The instrument must catch its planted failures before it may measure
 `--selftest` gates every run (the same fail-closed discipline as the sibling tools):
@@ -79,14 +80,22 @@ weakest family improves = breadth) or only the MEAN (the strong families get str
 This makes budget an *assurance* axis, not a bare metric: it catches a "more compute → more general"
 claim that is really "more compute → narrower but deeper." The standing demonstration is the **same**
 tabular-Q learner shown two ways — on a universe it can cover (the four non-memory families) budget buys
-**breadth** (floor rises with the mean, `breadth_ratio` ≈ 0.9, target floor reached); on the **full**
+**breadth** (floor rises with the mean, `breadth_ratio` ≈ 0.85, target floor reached); on the **full**
 universe, where the memory capability is structurally unlearnable for it, the same budget buys **depth
-only** (mean rises, floor memory-pinned near zero, `breadth_ratio` ≈ 0.2, `budget_to_floor` = `None`).
+only** (mean rises, floor memory-pinned near zero, `breadth_ratio` negative, `budget_to_floor` = `None`).
 More compute did not make it general — and the axis says so.
 
+## v1.0 — the seven-family universe (re-versioned 2026-07-09)
+Both adaptation families below were built as **extensions**, validated against their own planted
+failure classes, and then **promoted into the default universe in one deliberate re-versioning
+commit** — after a measured decision brief showed the expansion strictly strengthens the claim (a
+seven-capability floor subsumes the five-capability one) and before any earlier numbers had been
+published (retraction-free timing). Every number in this README is stated against the seven-family
+universe.
+
 ## v0.7 — extension families (the universe grows deliberately, not accidentally)
-`EXTENSION_FAMILIES` holds families that are **built, controlled, and measurable** (via
-`measure(families=["changepoint"])`) but not yet in the default universe — because adding a family
+`EXTENSION_FAMILIES` holds families that are **built, controlled, and measurable** but not yet in
+the default universe (the slot is currently empty — both first extensions were promoted) — because adding a family
 re-baselines every existing number (the floor is a min; a new weakest family rewrites the headline).
 Promoting an extension into `FAMILIES` is an explicit re-versioning of the declared universe, made in
 the open.

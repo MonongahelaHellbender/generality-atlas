@@ -5,7 +5,7 @@ must catch before it is allowed to measure anything.
 
 WHAT THIS IS (and is not): an instrument, not an intelligence. Generality here is operationalized as
 Chollet's skill-acquisition efficiency — how fast performance climbs on task instances the agent has
-NEVER seen, within a declared experience budget — measured across five diagnostic families, each
+NEVER seen, within a declared experience budget — measured across seven diagnostic families, each
 isolating ONE capability (bsuite's move), every instance procedurally generated fresh from a seed
 (Procgen's move: nothing to memorize), every score normalized against an analytic oracle and a random
 floor (no judge anywhere in the verdict path). The aggregate is the full profile plus the GENERALITY
@@ -13,7 +13,7 @@ FLOOR — the minimum across families — never a single mean without its denomi
 
 The claim-licensing ledger (open-ended by design — claims scale with evidence):
   * Claims are licensed by the DECLARED UNIVERSE and the measured evidence, nothing more, at any given
-    time. Today's five toy families license no claim about general intelligence — a statement about
+    time. Today's seven toy families license no claim about general intelligence — a statement about
     today's evidence, not a ceiling on the project. Grow the universe (families, budgets, difficulty,
     transfer) and what may honestly be claimed grows exactly as fast, and no faster.
   * Legg-Hutter universal intelligence is provably uncomputable; this is a finite, declared, computable
@@ -322,22 +322,27 @@ class SustainedChangeEnv(ChangePointEnv):
 # AULC stays near floor and the family cannot distinguish the capability it exists to isolate. Rule:
 # each family's budget must give an idealized learner room to both ACQUIRE and EXPLOIT within the
 # AULC window, or the family measures nothing.
+# v1.0 UNIVERSE (re-versioned 2026-07-09, a deliberate human decision recorded in the commit):
+# the changepoint families were built as EXTENSIONS, validated with their own planted-failure
+# classes, and PROMOTED here once the decision brief showed the expansion was nearly free for a
+# genuinely adaptive agent and strictly strengthens the claim. Seven families, seven capabilities.
 FAMILIES = {
-    "bandit":   (BanditEnv,       "exploration",            30),
-    "gridnav":  (GridNavEnv,      "credit-assignment",      30),
-    "sequence": (SequenceRuleEnv, "rule-induction",         25),
-    "memory":   (MemoryRecallEnv, "memory",                 60),
-    "parity":   (ParityEnv,       "systematic-computation", 40),
+    "bandit":                (BanditEnv,          "exploration",            30),
+    "gridnav":               (GridNavEnv,         "credit-assignment",      30),
+    "sequence":              (SequenceRuleEnv,    "rule-induction",         25),
+    "memory":                (MemoryRecallEnv,    "memory",                 60),
+    "parity":                (ParityEnv,          "systematic-computation", 40),
+    "changepoint":           (ChangePointEnv,     "adaptation-to-change",   40),
+    "changepoint_sustained": (SustainedChangeEnv, "sustained-adaptation",   60),
 }
 
 # EXTENSION families: built, controlled, and measurable via measure(families=[...]) — but NOT yet in
 # the default declared universe, because adding a family re-baselines EVERY existing number (the floor
 # is a min; a new weakest family rewrites the headline). Promoting an extension into FAMILIES is a
 # deliberate re-versioning of the universe, made in the open, not a side effect of adding code.
-EXTENSION_FAMILIES = {
-    "changepoint": (ChangePointEnv, "adaptation-to-change", 40),
-    "changepoint_sustained": (SustainedChangeEnv, "sustained-adaptation", 60),
-}
+# (both prior extensions were promoted into FAMILIES 2026-07-09; the extension slot and its
+# promote-deliberately discipline remain for the next family)
+EXTENSION_FAMILIES = {}
 
 
 def _family_spec(name):
@@ -891,10 +896,8 @@ def _selftest(verbose: bool = True) -> int:
     e1 = measure_efficiency(lambda a, s: TabularQAgent(a, s), families=learnable, n_instances=6)
     check("budget axis reproducibility (same seed => identical)", e1 == eff_breadth)
 
-    # 9) EXTENSION family: changepoint (adaptation-to-unsignaled-change). Not yet in the default
-    #    universe (promoting it re-baselines every number — a deliberate re-versioning, her call);
-    #    but it must pass the same instrument-validity discipline before ANY measurement with it is
-    #    trusted. The capability-isolating signal is the POST-SWITCH slice: whole-window AULC can be
+    # 9) changepoint (adaptation-to-unsignaled-change; PROMOTED into the default universe
+    #    2026-07-09 after passing these controls as an extension). The capability-isolating signal is the POST-SWITCH slice: whole-window AULC can be
     #    padded by pre-switch acquisition while adaptation is ZERO.
     cp_seeds = [random.Random(4242).randrange(10**9) for _ in range(6)]
     cp_q = measure_family(lambda a, s: TabularQAgent(a, s), "changepoint", cp_seeds, agent_seed=99)
@@ -914,8 +917,8 @@ def _selftest(verbose: bool = True) -> int:
     cp_q2 = measure_family(lambda a, s: TabularQAgent(a, s), "changepoint", cp_seeds, agent_seed=99)
     check("changepoint reproducibility (same seeds => identical)", cp_q == cp_q2)
 
-    # 10) EXTENSION family: changepoint_sustained (STEADY-STATE plasticity — a different capability
-    #     from single-shock adaptation; a mechanism can pass one switch and still collapse over six).
+    # 10) changepoint_sustained (STEADY-STATE plasticity — a different capability from single-shock
+    #     adaptation; a mechanism can pass one switch and still collapse over six. PROMOTED 2026-07-09).
     #     Signal = the LATE slice (past >= 3 switches for every cadence draw). The planted failure is
     #     the plasticity-loss class ITSELF: running-mean values (alpha=1/n) that never forget.
     late = lambda m: (sum(m["curve"][CHANGEPOINT_SUSTAINED_SLICE:])
