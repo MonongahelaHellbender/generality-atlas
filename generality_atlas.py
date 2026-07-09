@@ -60,13 +60,14 @@ except Exception:
 #   .oracle_return / .random_return  = per-episode expected return of the optimal / random policy
 # ────────────────────────────────────────────────────────────────────────────────────────────────────
 class BanditEnv:
-    """k-armed Bernoulli bandit. Capability: EXPLORATION. Analytic oracle and floor."""
-    def __init__(self, seed: int, k: int = 5, pulls: int = 20):
+    """k-armed Bernoulli bandit. Capability: EXPLORATION. Analytic oracle and floor.
+    Difficulty axis: the best-arm margin (thinner = harder), action space preserved."""
+    def __init__(self, seed: int, k: int = 5, pulls: int = 20, margin: float = 0.15):
         rng = random.Random(seed)
         while True:
             self.probs = [round(rng.uniform(0.05, 0.95), 3) for _ in range(k)]
             top = sorted(self.probs)[-2:]
-            if top[1] - top[0] >= 0.15:            # unique best arm with a real margin
+            if top[1] - top[0] >= margin:          # unique best arm with the declared margin
                 break
         self.pulls, self.actions = pulls, list(range(k))
         self.oracle_return = pulls * max(self.probs)
@@ -84,17 +85,18 @@ class BanditEnv:
 
 
 class GridNavEnv:
-    """5x5 grid with seeded walls and goal, BFS-verified solvable. Capability: CREDIT ASSIGNMENT.
-    Reward 1 on reaching the goal (episode return is success). Random floor is SAMPLED (seeded)."""
-    SIZE, CAP = 5, 40
+    """Seeded-wall grid with BFS-verified solvable goal. Capability: CREDIT ASSIGNMENT.
+    Reward 1 on reaching the goal (episode return is success). Random floor is SAMPLED (seeded).
+    Difficulty axis: grid size (5x5 easy, larger harder), action space preserved (4 moves)."""
 
-    def __init__(self, seed: int):
+    def __init__(self, seed: int, size: int = 5, cap: int = 40):
+        self.SIZE, self.CAP = size, cap
         rng = random.Random(seed)
         while True:
             self.walls = {(r, c) for r in range(self.SIZE) for c in range(self.SIZE)
                           if (r, c) != (0, 0) and rng.random() < 0.2}
             far = [(r, c) for r in range(self.SIZE) for c in range(self.SIZE)
-                   if r + c >= 5 and (r, c) not in self.walls]
+                   if r + c >= self.SIZE and (r, c) not in self.walls]
             if not far:
                 continue
             self.goal = rng.choice(far)
@@ -414,6 +416,110 @@ def measure(agent_factory, master_seed: int = 20260709, n_instances: int = 8,
     }
 
 
+# ────────────────────────────────────────────────────────────────────────────────────────────────────
+# v0.5 — WITHIN-FAMILY DIFFICULTY TRANSFER (the deferred item, now built, controls-first)
+#
+# Question: does learning EASY instances of a family accelerate acquisition on HARD instances of the
+# same family? Metrics from the literature: jumpstart delta and AULC delta (transfer vs from-scratch).
+#
+# The transfer instrument carries its OWN controls, and may not report difficulty transfer unless both
+# pass in the same run:
+#   POSITIVE control — parity, same difficulty, different instances: the parity rule is instance-
+#     invariant and the observation space is shared, so a pretrained learner MUST show strong positive
+#     transfer. If it doesn't, the harness is broken.
+#   NEGATIVE control — bandit, same difficulty, different instances: arm identities are instance-
+#     random, so cross-instance transfer MUST be ~0. If it isn't, the harness is leaking.
+#
+# Difficulty axes preserve the ACTION SPACE (a transfer-condition requirement): bandit = thinner
+# best-arm margin; gridnav = larger grid; memory = more distractors; parity = more bits. The sequence
+# family is EXCLUDED from difficulty transfer (its natural axes change the action space) — declared,
+# with this reason, not hidden.
+DIFFICULTY = {
+    "bandit":  {"easy": {},                        "hard": {"margin": 0.06}},
+    "gridnav": {"easy": {},                        "hard": {"size": 7, "cap": 60}},
+    "memory":  {"easy": {},                        "hard": {"distractors": 6}},
+    "parity":  {"easy": {},                        "hard": {"bits": 6}},
+}
+
+
+def _make_env(family: str, seed: int, difficulty: str):
+    ctor = FAMILIES[family][0]
+    return ctor(seed, **DIFFICULTY[family][difficulty])
+
+
+def measure_transfer(agent_factory, family: str, master_seed: int = 20260709,
+                     n_source: int = 3, n_target: int = 4,
+                     source_difficulty: str = "easy", target_difficulty: str = "hard") -> dict:
+    """Transfer vs scratch on the same target instances. SCRATCH: a fresh agent learns each target.
+    TRANSFER: a fresh agent first learns n_source SOURCE instances (full budget each), then the same
+    target — same agent object, carrying whatever it can. Deltas > 0 mean the source learning helped."""
+    episodes = FAMILIES[family][2]
+    # zlib.crc32, NOT built-in hash(): hash() is randomized per process (PYTHONHASHSEED), which made
+    # the transfer controls nondeterministic ACROSS processes while the in-process reproducibility
+    # check still passed — caught when a fresh run flipped the negative control. Reproducibility
+    # means bit-identical across processes, not just within one.
+    import zlib
+    rng = random.Random(master_seed + zlib.crc32(family.encode()) % 100000)
+    source_seeds = [rng.randrange(10**9) for _ in range(n_source)]
+    target_seeds = [rng.randrange(10**9) for _ in range(n_target)]
+
+    def learn(env, agent):
+        curve = []
+        for _ in range(episodes):
+            curve.append(_normalize(_run_episode(env, agent), env))
+            agent.episode_end()
+        return curve
+
+    scratch_curves, transfer_curves = [], []
+    for i, t in enumerate(target_seeds):
+        scratch_curves.append(learn(_make_env(family, t, target_difficulty),
+                                    agent_factory(_make_env(family, t, target_difficulty).actions,
+                                                  master_seed + 31 + i)))
+        agent = agent_factory(_make_env(family, source_seeds[0], source_difficulty).actions,
+                              master_seed + 31 + i)
+        for s in source_seeds:
+            learn(_make_env(family, s, source_difficulty), agent)      # pretraining, discarded curves
+        transfer_curves.append(learn(_make_env(family, t, target_difficulty), agent))
+
+    def agg(curves):
+        mean = [sum(c[e] for c in curves) / len(curves) for e in range(episodes)]
+        return {"jumpstart": round(mean[0], 4), "aulc": round(sum(mean) / len(mean), 4)}
+
+    scratch, transfer = agg(scratch_curves), agg(transfer_curves)
+    return {
+        "family": family,
+        "source": f"{n_source}x {source_difficulty}", "target": f"{n_target}x {target_difficulty}",
+        "scratch": scratch, "transfer": transfer,
+        "jumpstart_delta": round(transfer["jumpstart"] - scratch["jumpstart"], 4),
+        "aulc_delta": round(transfer["aulc"] - scratch["aulc"], 4),
+    }
+
+
+def transfer_controls_pass(master_seed: int = 20260709) -> tuple:
+    """Both controls must pass before any difficulty-transfer number may be reported (fail-closed).
+    The controls run on REFERENCE agents, never on the subject being measured.
+
+    TWO control redesigns, each found by a control failing (2026-07-09): (1) the first negative
+    control assumed bandit cross-instance transfer must be ~0 — it read +0.30, and the diagnosis was
+    a REAL, unanticipated channel: process-state transfer (a pretrained learner carries its annealed
+    exploration schedule even where instance knowledge cannot carry). The negative control's actual
+    job is detecting HARNESS asymmetry, and its clean instrument is the RANDOM agent — learns
+    nothing, carries nothing, so any nonzero delta is a harness bug. (2) The positive control
+    originally ran on the SUBJECT's own factory and failed for a weak-at-parity subject even though
+    the harness was fine — conflating instrument validity with subject strength. Controls belong to
+    the instrument: the positive control runs a KNOWN learner (tabular-Q), the negative a known
+    non-learner, and any subject's measurements are gated on instrument validity, not on the
+    subject's own abilities."""
+    pos = measure_transfer(lambda a, s: TabularQAgent(a, s), "parity", master_seed,
+                           source_difficulty="easy", target_difficulty="easy")
+    neg = measure_transfer(lambda a, s: RandomAgent(a, s), "parity", master_seed,
+                           source_difficulty="easy", target_difficulty="easy")
+    ok_pos = pos["jumpstart_delta"] >= 0.35          # a known learner's invariant rule MUST carry
+    ok_neg = abs(neg["jumpstart_delta"]) <= 0.10 and abs(neg["aulc_delta"]) <= 0.10
+    return (ok_pos and ok_neg), {"positive_control": pos, "negative_control": neg,
+                                 "positive_ok": ok_pos, "negative_ok": ok_neg}
+
+
 def attest_run(report: dict):
     """Optional certificate: every declared (family x seed) cell measured -> ok; anything declared but
     missing would DEFER (fail-closed). The numeric profile stays in the report, bound by scope hash."""
@@ -493,7 +599,19 @@ def _selftest(verbose: bool = True) -> int:
     check("memorizer floors on FRESH instances (contamination exposed)", on_fresh["aulc"] <= 0.15,
           f"AULC={on_fresh['aulc']}")
 
-    # 6) certificate path (honest either way)
+    # 6) v0.5 transfer instrument: BOTH built-in controls must pass for the honest learner, and the
+    #    machinery must be reproducible. (Difficulty-transfer numbers themselves are MEASUREMENTS,
+    #    reported not asserted — the controls are what make them meaningful.)
+    ok_controls, ctl = transfer_controls_pass()
+    check("transfer POSITIVE control (parity same-difficulty carries over)",
+          ctl["positive_ok"], f"jumpstart_delta={ctl['positive_control']['jumpstart_delta']}")
+    check("transfer NEGATIVE control (random agent => harness symmetric, ~0)",
+          ctl["negative_ok"], f"aulc_delta={ctl['negative_control']['aulc_delta']}")
+    t1 = measure_transfer(lambda a, s: TabularQAgent(a, s), "parity", master_seed=55)
+    t2 = measure_transfer(lambda a, s: TabularQAgent(a, s), "parity", master_seed=55)
+    check("transfer reproducibility (same seed => identical)", t1 == t2)
+
+    # 7) certificate path (honest either way)
     if _HAS_ATTEST:
         doc = attest_run(rnd)
         ok, probs, _ = _ca.verify(doc)
@@ -524,6 +642,20 @@ if __name__ == "__main__":
     if _selftest(verbose=False):
         print("SELFTEST FAILING — the instrument may not measure anything.", file=sys.stderr)
         sys.exit(2)
+    if "--transfer" in sys.argv:
+        factory = lambda a, s: TabularQAgent(a, s)
+        ok, ctl = transfer_controls_pass()
+        print(f"controls: positive_ok={ctl['positive_ok']} "
+              f"(jumpstart_delta={ctl['positive_control']['jumpstart_delta']})  "
+              f"negative_ok={ctl['negative_ok']} (aulc_delta={ctl['negative_control']['aulc_delta']})")
+        if not ok:
+            print("CONTROLS FAILED — difficulty-transfer numbers are not meaningful; not reporting.")
+            sys.exit(3)
+        for fam in DIFFICULTY:
+            r = measure_transfer(factory, fam)
+            print(f"  {fam:<8} easy->hard  jumpstart_delta={r['jumpstart_delta']:+.3f}  "
+                  f"aulc_delta={r['aulc_delta']:+.3f}   (scratch AULC={r['scratch']['aulc']:.3f})")
+        sys.exit(0)
     if "--run" in sys.argv:
         reports = {
             "random (control)": measure(lambda a, s: RandomAgent(a, s)),

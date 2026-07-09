@@ -41,10 +41,33 @@ diagnostic families that each isolate one capability. Nothing beyond that declar
 - with the optional `coverage-attestation` sibling present, each run can emit a scope-bound
   certificate: measured cells attest ok, declared-but-unmeasured cells DEFER, fail-closed.
 
+## v0.5 — within-family difficulty transfer (controls-first)
+`measure_transfer` compares learning a HARD instance from scratch vs after pretraining on EASY
+instances of the same family (jumpstart delta, AULC delta — the literature's transfer metrics).
+Difficulty axes preserve the action space (bandit: thinner best-arm margin; gridnav: larger grid;
+memory: more distractors; parity: more bits); the sequence family is excluded from difficulty
+transfer because its natural axes change the action space — declared, with the reason.
+
+**No transfer number is reported unless both built-in controls pass in the same run (fail-closed):**
+the POSITIVE control (parity's rule is instance-invariant, so same-difficulty transfer must be
+strongly positive) and the NEGATIVE control (a random agent learns nothing and carries nothing, so
+any nonzero delta means the harness itself is asymmetric). The negative control was originally
+mis-specified as a bandit assumption and FAILED — the diagnosis found a real, unanticipated channel
+(process-state transfer: a pretrained learner carries its annealed exploration schedule even where
+instance knowledge cannot carry), which is now a named finding rather than a control. Transfer has
+more channels than instance knowledge; each control isolates one.
+
+First controls-gated findings on the built-in agents: transfer is REAL and STRUCTURED — strongly
+positive where the learned representation is difficulty-invariant, near zero where observation keys
+are disjoint across difficulties, and genuinely NEGATIVE where stale values plus an annealed
+exploration schedule interfere on harder variants. Negative transfer is reported as measured, never
+hidden.
+
 ## Run (zero dependencies — Python standard library)
 ```
 python3 generality_atlas.py --selftest      # the gate; must pass before anything is measured
 python3 generality_atlas.py --run           # the atlas for the built-in baselines
+python3 generality_atlas.py --transfer      # controls-gated difficulty-transfer measurements
 python3 generality_atlas.py --run --json    # machine-readable report (+ attestation if available)
 ```
 
