@@ -1,0 +1,73 @@
+# generality-atlas
+
+> Measure **generality** — skill-acquisition efficiency on genuinely novel tasks — contamination-free,
+> with the coverage denominator as the headline and planted failures the instrument must catch before
+> it is allowed to measure anything.
+
+This is an instrument, not an intelligence. It never claims to measure AGI (the one formal definition
+of general intelligence, Legg–Hutter universal intelligence, is provably uncomputable — that is a named
+barrier, not an engineering obstacle). What it measures, exactly: how fast an agent's performance
+climbs on task instances it has **never seen**, within a declared experience budget, across five
+diagnostic families that each isolate one capability. Nothing beyond that declared universe is licensed.
+
+## The design (reuse, not invention)
+- **Diagnostic families** (bsuite's move — each isolates ONE capability): k-armed bandits
+  (exploration) · seeded grid mazes, BFS-verified solvable (credit assignment) · hidden symbol
+  bijections (rule induction) · cue/distractor/recall episodes (memory) · 4-bit parity (systematic
+  computation).
+- **Procedural freshness** (Procgen's move): every instance is generated from a seed at run time.
+  There is nothing to memorize; a memorizer is structurally reduced to its true learning ability.
+- **Metric names from the transfer-RL literature** (arXiv:2009.07888): jumpstart, AULC (area under
+  the learning curve), final competence — normalized per family against an **analytic oracle** and a
+  **random floor** (one floor, gridnav's, is sampled with its own fixed seed and labeled as such).
+  Normalization is deliberately **unclipped**: clipping per-episode scores at zero turns symmetric
+  noise into upward bias (the selftest caught this in the first cut — the random control read 0.26
+  instead of ~0).
+- **The aggregate is the profile + the GENERALITY FLOOR** — the minimum AULC across families, never a
+  bare mean. A high mean with a low floor is narrowness, not generality, and the built-in narrow agent
+  demonstrates exactly that signature (bandit spike 0.82, floor negative).
+
+## The instrument must catch its planted failures before it may measure
+`--selftest` gates every run (the same fail-closed discipline as the sibling tools):
+- a **random control** must read ~0 everywhere, two-sided;
+- a **tabular-Q learner** must separate clearly from the control where learning is possible, and the
+  **memory family must floor it** — a memoryless learner cannot represent the cue, and the instrument's
+  job is to display that gap, not hide it;
+- a **planted narrow agent** (ignores observations) must show a spiky profile and a low floor;
+- a **planted memorizer** (a frozen learner pre-trained on ONE leaked instance — the honest minimal
+  contamination model, since instance identity is not recoverable from observations here) must ace the
+  leaked instance (AULC 1.0) and floor on fresh ones (0.05);
+- identical master seed ⇒ **bit-identical report** (reproducibility);
+- with the optional `coverage-attestation` sibling present, each run can emit a scope-bound
+  certificate: measured cells attest ok, declared-but-unmeasured cells DEFER, fail-closed.
+
+## Run (zero dependencies — Python standard library)
+```
+python3 generality_atlas.py --selftest      # the gate; must pass before anything is measured
+python3 generality_atlas.py --run           # the atlas for the built-in baselines
+python3 generality_atlas.py --run --json    # machine-readable report (+ attestation if available)
+```
+
+Any agent that speaks the protocol can be measured: `act(obs) -> action`,
+`update(obs, action, reward, next_obs, done)`, `episode_end()`.
+
+## Boundary ledger (claims this project may never make)
+1. No AGI claim, no sentience claim, no understanding claim — ever.
+2. No generalization claim beyond the declared universe: five toy families, these budgets, these seeds.
+   Every score is complete relative to THIS reference.
+3. The floor is the headline. Reporting the mean without the floor is prohibited.
+4. v0 has **no transfer measurement** — cross-family transfer is ill-defined for tabular agents
+   (different observation/action spaces). Deferred with this reason; v0.5 = within-family difficulty
+   transfer. Not hidden.
+5. An agent scoring well here is good at these five families under these budgets. Nothing more.
+
+## Lineage + what this is for
+Sibling of [honesty-atlas](https://github.com/MonongahelaHellbender/honesty-atlas) (the same
+contamination-free, oracle-graded, classified-failure discipline, pointed at generality instead of
+calibration). The companion seed agent — an observe/plan/act/learn runtime this instrument will
+eventually measure — lives in a separate WIP repo. The instrument came first, deliberately: audit
+before capability. If a garage-scale system ever makes real progress toward general learning, an
+instrument like this is the only way its builder would honestly KNOW; and if none does, the instrument
+is the durable artifact.
+
+MIT © Melissa Ellison. Standard library only. Nothing leaves your machine.
