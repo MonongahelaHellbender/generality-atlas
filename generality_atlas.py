@@ -11,17 +11,21 @@ isolating ONE capability (bsuite's move), every instance procedurally generated 
 floor (no judge anywhere in the verdict path). The aggregate is the full profile plus the GENERALITY
 FLOOR — the minimum across families — never a single mean without its denominator.
 
-The honest boundary (the ledger, kept here so it ships with the code):
-  * This does NOT measure AGI, sentience, understanding, or anything beyond the declared universe of
-    five toy families. Every number is complete relative to THIS reference — that is the whole point.
+The claim-licensing ledger (open-ended by design — claims scale with evidence):
+  * Claims are licensed by the DECLARED UNIVERSE and the measured evidence, nothing more, at any given
+    time. Today's five toy families license no claim about general intelligence — a statement about
+    today's evidence, not a ceiling on the project. Grow the universe (families, budgets, difficulty,
+    transfer) and what may honestly be claimed grows exactly as fast, and no faster.
   * Legg-Hutter universal intelligence is provably uncomputable; this is a finite, declared, computable
-    slice of the question, and claims exactly that much.
+    slice of the question, and claims exactly that much — a slice that can keep growing.
   * v0 defers cross-family transfer (ill-defined for tabular agents across different observation and
     action spaces); v0.5 = within-family difficulty transfer. Deferred, with this reason, not hidden.
   * The grid family's random floor is SAMPLED (with its own fixed seed, 200 episodes), not analytic —
     labeled as such in the report.
-  * An agent scoring well here is good at these five families under these budgets. Nothing more is
-    licensed. The instrument's job is to make narrowness VISIBLE, not to certify its absence.
+  * The one PERMANENT rule is the contamination-free protocol itself (fresh instances, oracle grading,
+    no judge in the verdict path) — permanent because it protects measurement validity, not because it
+    limits ambition. The instrument's job is to make narrowness VISIBLE, and to make any future claim
+    of generality PROVABLE on instances nothing could have memorized.
 
 Prior art (reused, not reinvented): metric names from the transfer-RL literature (jumpstart / AULC /
 final competence — arXiv:2009.07888); diagnostic-family design from bsuite; per-instance procedural
@@ -220,11 +224,17 @@ class ParityEnv:
 
 
 # family registry: name -> (constructor, capability tag, episodes budget)
+# Budget calibration is part of the instrument's validity (learned the hard way, 2026-07-09): the
+# memory family's original 25-episode budget was information-theoretically too tight — 5 cues x 5
+# actions means even an IDEAL episodic learner spends ~the whole budget covering the space, so its
+# AULC stays near floor and the family cannot distinguish the capability it exists to isolate. Rule:
+# each family's budget must give an idealized learner room to both ACQUIRE and EXPLOIT within the
+# AULC window, or the family measures nothing.
 FAMILIES = {
     "bandit":   (BanditEnv,       "exploration",            30),
     "gridnav":  (GridNavEnv,      "credit-assignment",      30),
     "sequence": (SequenceRuleEnv, "rule-induction",         25),
-    "memory":   (MemoryRecallEnv, "memory",                 25),
+    "memory":   (MemoryRecallEnv, "memory",                 60),
     "parity":   (ParityEnv,       "systematic-computation", 40),
 }
 

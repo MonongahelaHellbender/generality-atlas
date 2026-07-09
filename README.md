@@ -51,15 +51,23 @@ python3 generality_atlas.py --run --json    # machine-readable report (+ attesta
 Any agent that speaks the protocol can be measured: `act(obs) -> action`,
 `update(obs, action, reward, next_obs, done)`, `episode_end()`.
 
-## Boundary ledger (claims this project may never make)
-1. No AGI claim, no sentience claim, no understanding claim — ever.
-2. No generalization claim beyond the declared universe: five toy families, these budgets, these seeds.
-   Every score is complete relative to THIS reference.
-3. The floor is the headline. Reporting the mean without the floor is prohibited.
-4. v0 has **no transfer measurement** — cross-family transfer is ill-defined for tabular agents
-   (different observation/action spaces). Deferred with this reason; v0.5 = within-family difficulty
-   transfer. Not hidden.
-5. An agent scoring well here is good at these five families under these budgets. Nothing more.
+## Claim-licensing ledger (how claims scale with evidence — open-ended by design)
+1. **Claims are licensed by the declared universe and the measured evidence — nothing more, at any
+   given time.** Today's universe (five toy families, these budgets) licenses no claim about general
+   intelligence. That is a statement about today's evidence, not a ceiling on the project.
+2. **The path to bigger claims is declared expansion.** Grow the family universe, the budgets, the
+   difficulty axes, the transfer measurements — and what may honestly be claimed grows exactly as
+   fast as the evidence does, and no faster. The ambition is unbounded; the wording is always bound
+   to the current reference.
+3. **The floor is the headline.** A mean without its floor misrepresents — the built-in narrow agent
+   is the standing demonstration (respectable mean, negative floor).
+4. **v0 defers transfer** — cross-family transfer is ill-defined for tabular agents (different
+   observation/action spaces). Deferred with this reason, not hidden; v0.5 = within-family difficulty
+   transfer, and transfer is exactly where the interesting generality evidence will live.
+5. **The contamination-free protocol is the one permanent rule** — fresh instances per run, oracle
+   grading, no judge in the verdict path. It is permanent because it protects measurement validity,
+   not because it limits ambition: whatever this project one day claims, it will be able to prove it
+   on instances nothing could have memorized.
 
 ## Lineage + what this is for
 Sibling of [honesty-atlas](https://github.com/MonongahelaHellbender/honesty-atlas) (the same
