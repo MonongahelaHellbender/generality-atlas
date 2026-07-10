@@ -315,6 +315,39 @@ class SustainedChangeEnv(ChangePointEnv):
         return self.cur_map
 
 
+class MultiRuleEnv:
+    """THREE conflicting hidden bijections over SHARED symbols and actions; the active rule index is
+    signaled in the observation (rule, symbol). Capability: INTERFERENCE-RESISTANCE — holding several
+    mutually contradictory rules simultaneously without letting them bleed into each other. A learner
+    that keys on the full observation is fine; a learner that generalizes over the rule signal (the
+    planted PhaseBlindAgent) collapses to the majority-consistent mush."""
+    def __init__(self, seed: int, alphabet: int = 4, n_rules: int = 3, rounds: int = 12):
+        rng = random.Random(seed)
+        self.alphabet, self.n_rules, self.rounds = alphabet, n_rules, rounds
+        self.actions = list(range(alphabet))
+        self.rules = []
+        for _ in range(n_rules):
+            m = list(range(alphabet))
+            rng.shuffle(m)
+            self.rules.append(m)
+        self.oracle_return = float(rounds)
+        self.random_return = rounds / alphabet
+        self._rng = random.Random(seed + 7)
+
+    def reset(self):
+        self._t = 0
+        self._phase = self._rng.randrange(self.n_rules)
+        self._cur = self._rng.randrange(self.alphabet)
+        return (self._phase, self._cur)
+
+    def step(self, action):
+        reward = 1.0 if action == self.rules[self._phase][self._cur] else 0.0
+        self._t += 1
+        self._phase = self._rng.randrange(self.n_rules)
+        self._cur = self._rng.randrange(self.alphabet)
+        return (self._phase, self._cur), reward, self._t >= self.rounds
+
+
 # family registry: name -> (constructor, capability tag, episodes budget)
 # Budget calibration is part of the instrument's validity (learned the hard way, 2026-07-09): the
 # memory family's original 25-episode budget was information-theoretically too tight — 5 cues x 5
@@ -340,9 +373,11 @@ FAMILIES = {
 # the default declared universe, because adding a family re-baselines EVERY existing number (the floor
 # is a min; a new weakest family rewrites the headline). Promoting an extension into FAMILIES is a
 # deliberate re-versioning of the universe, made in the open, not a side effect of adding code.
-# (both prior extensions were promoted into FAMILIES 2026-07-09; the extension slot and its
-# promote-deliberately discipline remain for the next family)
-EXTENSION_FAMILIES = {}
+# (the first two extensions were promoted into FAMILIES 2026-07-09; the slot and its
+# promote-deliberately discipline continue)
+EXTENSION_FAMILIES = {
+    "multirule": (MultiRuleEnv, "interference-resistance", 50),
+}
 
 
 def _family_spec(name):
@@ -507,6 +542,23 @@ class RunningMeanQAgent:
 
     def episode_end(self):
         self.eps = max(self.eps_min, self.eps * self.eps_decay)
+
+
+class PhaseBlindAgent:
+    """PLANTED FAILURE for the multirule extension family: keys on the SYMBOL only, ignoring the rule
+    signal — the interference victim. It learns the majority-consistent mush across conflicting rules
+    (~0.17) instead of the rules themselves; the instrument must display that collapse."""
+    def __init__(self, actions, seed: int):
+        self.inner = TabularQAgent(actions, seed)
+
+    def act(self, obs):
+        return self.inner.act(obs[1])
+
+    def update(self, obs, action, reward, next_obs, done):
+        self.inner.update(obs[1], action, reward, next_obs[1], done)
+
+    def episode_end(self):
+        self.inner.episode_end()
 
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -936,6 +988,22 @@ def _selftest(verbose: bool = True) -> int:
           late(su_q) - late(su_p) >= 0.15, f"gap={late(su_q) - late(su_p):.3f}")
     su_q2 = measure_family(lambda a, s: TabularQAgent(a, s), "changepoint_sustained", cp_seeds, agent_seed=99)
     check("sustained reproducibility (same seeds => identical)", su_q == su_q2)
+
+    # 11) EXTENSION family: multirule (interference-resistance). The plant is the failure class
+    #     itself: a phase-blind learner that generalizes over the rule signal and collapses to the
+    #     majority-consistent mush across three conflicting rules.
+    mr_q = measure_family(lambda a, s: TabularQAgent(a, s), "multirule", cp_seeds, agent_seed=99)
+    mr_r = measure_family(lambda a, s: RandomAgent(a, s), "multirule", cp_seeds, agent_seed=99)
+    mr_p = measure_family(lambda a, s: PhaseBlindAgent(a, s), "multirule", cp_seeds, agent_seed=99)
+    check("multirule: random control flat", abs(mr_r["aulc"]) <= 0.10, f"aulc={mr_r['aulc']}")
+    check("multirule: full-key learner holds all three rules (tabular-Q >= 0.40)",
+          mr_q["aulc"] >= 0.40, f"aulc={mr_q['aulc']}")
+    check("multirule: planted PHASE-BLIND learner collapses (interference displayed, <= 0.25)",
+          mr_p["aulc"] <= 0.25, f"aulc={mr_p['aulc']}")
+    check("multirule: resistance vs interference separation unmistakable (>= 0.25)",
+          mr_q["aulc"] - mr_p["aulc"] >= 0.25, f"gap={mr_q['aulc'] - mr_p['aulc']:.3f}")
+    mr_q2 = measure_family(lambda a, s: TabularQAgent(a, s), "multirule", cp_seeds, agent_seed=99)
+    check("multirule reproducibility (same seeds => identical)", mr_q == mr_q2)
 
     # 7) certificate path (honest either way)
     if _HAS_ATTEST:
