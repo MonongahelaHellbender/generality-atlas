@@ -135,6 +135,18 @@ draw): steady-state readaptation. The planted failure is the plasticity-loss cla
 running-mean learner (α=1/n) whose never-forgetting values deadlock under repeated change (late
 slice below random, −0.07, vs fixed-step tabular-Q's steady +0.22).
 
+## Extension in the slot: deepchain (deep exploration) — holding deliberately
+Family nine, **deepchain** (bsuite's deep-sea design, reused not reinvented): an N-step chain where
+one per-instance action advances and the other resets, with reward only at the far end — the random
+floor is analytic and essentially zero (0.5^N). The positive control is an **optimistic-init
+bootstrapped Q** (untried paths look promising; value propagates backward — the classic solver);
+the displayed contrast is eps-greedy tabular-Q failing exponentially (0.49 vs 0.03, the
+myopic-exploration split made visible). It **holds in the extension slot deliberately**: the
+fresh-family test showed the strongest current agent reads well below the solver here, so promoting
+it now would crash the headline floor without informing anything — the family's job is to referee
+the deep-exploration mechanism when it arrives. Universe growth stays deliberate in both directions:
+promoted when it strengthens the claim, held when its verdict is "this capability is still missing."
+
 ## Run (zero dependencies — Python standard library)
 ```
 python3 generality_atlas.py --selftest      # the gate; must pass before anything is measured

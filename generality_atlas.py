@@ -348,6 +348,36 @@ class MultiRuleEnv:
         return (self._phase, self._cur), reward, self._t >= self.rounds
 
 
+class ChainEnv:
+    """N-step chain: one action ADVANCES, the other RESETS to the start (which action advances is
+    drawn per instance — nothing to memorize); reward ONLY at the far end. Capability: DEEP /
+    COMMITTED EXPLORATION (bsuite's deep-sea design, reused not reinvented). The random floor is
+    analytic and essentially zero (0.5^length); eps-greedy exploration fails exponentially while
+    optimistic value propagation solves it — the family displays exactly that split."""
+    def __init__(self, seed: int, length: int = 8):
+        rng = random.Random(seed)
+        self.length = length
+        self.actions = [0, 1]
+        self.right = rng.randrange(2)
+        self.oracle_return = 1.0
+        self.random_return = 0.5 ** length
+        self.cap = length + 2
+
+    def reset(self):
+        self._pos = 0
+        self._t = 0
+        return self._pos
+
+    def step(self, action):
+        self._t += 1
+        if action == self.right:
+            self._pos += 1
+        else:
+            self._pos = 0
+        done = self._pos >= self.length or self._t >= self.cap
+        return self._pos, (1.0 if self._pos >= self.length else 0.0), done
+
+
 # family registry: name -> (constructor, capability tag, episodes budget)
 # Budget calibration is part of the instrument's validity (learned the hard way, 2026-07-09): the
 # memory family's original 25-episode budget was information-theoretically too tight — 5 cues x 5
@@ -375,9 +405,13 @@ FAMILIES = {
 # the default declared universe, because adding a family re-baselines EVERY existing number (the floor
 # is a min; a new weakest family rewrites the headline). Promoting an extension into FAMILIES is a
 # deliberate re-versioning of the universe, made in the open, not a side effect of adding code.
-# (all three extensions to date were promoted into FAMILIES 2026-07-09; the slot and its
-# promote-deliberately discipline continue for the next family)
-EXTENSION_FAMILIES = {}
+# (the first three extensions were promoted into FAMILIES 2026-07-09; deepchain HOLDS in the slot
+# deliberately: the fresh-family test showed the current best agent reads ~0.2-0.3 here — promoting
+# it before a deep-exploration mechanism exists would be honest but uninformative floor-crashing;
+# the family's job right now is to REFEREE that mechanism when it arrives)
+EXTENSION_FAMILIES = {
+    "deepchain": (ChainEnv, "deep-exploration", 60),
+}
 
 
 def _family_spec(name):
@@ -559,6 +593,37 @@ class PhaseBlindAgent:
 
     def episode_end(self):
         self.inner.episode_end()
+
+
+class OptimisticQAgent:
+    """POSITIVE-CONTROL reference for the deepchain family: Q initialized HIGH (optimism in the face
+    of uncertainty) with bootstrapped updates — the classic deep-exploration solver. Untried paths
+    look promising until proven otherwise, and value propagates backward through the chain; this is
+    exactly what eps-greedy (and any non-bootstrapping learner) lacks."""
+    def __init__(self, actions, seed: int, alpha=0.5, gamma=0.97, eps=0.05, eps_decay=0.95, eps_min=0.0):
+        self.actions = list(actions)
+        self._rng = random.Random(seed)
+        self.alpha, self.gamma, self.eps, self.eps_decay, self.eps_min = alpha, gamma, eps, eps_decay, eps_min
+        self.q = {}
+
+    def _qs(self, obs):
+        return self.q.setdefault(obs, [1.0] * len(self.actions))
+
+    def act(self, obs):
+        if self._rng.random() < self.eps:
+            return self._rng.choice(self.actions)
+        qs = self._qs(obs)
+        best = max(qs)
+        return self.actions[self._rng.choice([i for i, v in enumerate(qs) if v == best])]
+
+    def update(self, obs, action, reward, next_obs, done):
+        qs = self._qs(obs)
+        target = reward if done else reward + self.gamma * max(self._qs(next_obs))
+        i = self.actions.index(action)
+        qs[i] += self.alpha * (target - qs[i])
+
+    def episode_end(self):
+        self.eps = max(self.eps_min, self.eps * self.eps_decay)
 
 
 # ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1004,6 +1069,23 @@ def _selftest(verbose: bool = True) -> int:
           mr_q["aulc"] - mr_p["aulc"] >= 0.25, f"gap={mr_q['aulc'] - mr_p['aulc']:.3f}")
     mr_q2 = measure_family(lambda a, s: TabularQAgent(a, s), "multirule", cp_seeds, agent_seed=99)
     check("multirule reproducibility (same seeds => identical)", mr_q == mr_q2)
+
+    # 12) EXTENSION family: deepchain (deep/committed exploration — bsuite's deep-sea, reused).
+    #     Positive control = optimistic-init bootstrapped Q (the classic solver); the displayed
+    #     contrast is eps-greedy tabular-Q failing exponentially — myopic exploration made visible.
+    dc_o = measure_family(lambda a, s: OptimisticQAgent(a, s), "deepchain", cp_seeds, agent_seed=99)
+    dc_r = measure_family(lambda a, s: RandomAgent(a, s), "deepchain", cp_seeds, agent_seed=99)
+    dc_q = measure_family(lambda a, s: TabularQAgent(a, s), "deepchain", cp_seeds, agent_seed=99)
+    check("deepchain: random control flat (floor is analytic ~0)", abs(dc_r["aulc"]) <= 0.05,
+          f"aulc={dc_r['aulc']}")
+    check("deepchain: optimistic-init Q SOLVES it (value propagation, >= 0.35)",
+          dc_o["aulc"] >= 0.35, f"aulc={dc_o['aulc']}")
+    check("deepchain: eps-greedy myopia DISPLAYED (tabular-Q <= 0.10)",
+          dc_q["aulc"] <= 0.10, f"aulc={dc_q['aulc']}")
+    check("deepchain: deep-vs-myopic separation unmistakable (>= 0.30)",
+          dc_o["aulc"] - dc_q["aulc"] >= 0.30, f"gap={dc_o['aulc'] - dc_q['aulc']:.3f}")
+    dc_o2 = measure_family(lambda a, s: OptimisticQAgent(a, s), "deepchain", cp_seeds, agent_seed=99)
+    check("deepchain reproducibility (same seeds => identical)", dc_o == dc_o2)
 
     # 7) certificate path (honest either way)
     if _HAS_ATTEST:
