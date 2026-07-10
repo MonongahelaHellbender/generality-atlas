@@ -5,7 +5,7 @@ must catch before it is allowed to measure anything.
 
 WHAT THIS IS (and is not): an instrument, not an intelligence. Generality here is operationalized as
 Chollet's skill-acquisition efficiency — how fast performance climbs on task instances the agent has
-NEVER seen, within a declared experience budget — measured across seven diagnostic families, each
+NEVER seen, within a declared experience budget — measured across eight diagnostic families, each
 isolating ONE capability (bsuite's move), every instance procedurally generated fresh from a seed
 (Procgen's move: nothing to memorize), every score normalized against an analytic oracle and a random
 floor (no judge anywhere in the verdict path). The aggregate is the full profile plus the GENERALITY
@@ -13,7 +13,7 @@ FLOOR — the minimum across families — never a single mean without its denomi
 
 The claim-licensing ledger (open-ended by design — claims scale with evidence):
   * Claims are licensed by the DECLARED UNIVERSE and the measured evidence, nothing more, at any given
-    time. Today's seven toy families license no claim about general intelligence — a statement about
+    time. Today's eight toy families license no claim about general intelligence — a statement about
     today's evidence, not a ceiling on the project. Grow the universe (families, budgets, difficulty,
     transfer) and what may honestly be claimed grows exactly as fast, and no faster.
   * Legg-Hutter universal intelligence is provably uncomputable; this is a finite, declared, computable
@@ -355,10 +355,11 @@ class MultiRuleEnv:
 # AULC stays near floor and the family cannot distinguish the capability it exists to isolate. Rule:
 # each family's budget must give an idealized learner room to both ACQUIRE and EXPLOIT within the
 # AULC window, or the family measures nothing.
-# v1.0 UNIVERSE (re-versioned 2026-07-09, a deliberate human decision recorded in the commit):
-# the changepoint families were built as EXTENSIONS, validated with their own planted-failure
-# classes, and PROMOTED here once the decision brief showed the expansion was nearly free for a
-# genuinely adaptive agent and strictly strengthens the claim. Seven families, seven capabilities.
+# v1.1 UNIVERSE (re-versioned 2026-07-09 evening, second deliberate promotion): multirule joined
+# after the same discipline — built as an extension, validated with its own planted-failure class
+# (the phase-blind interference victim), promoted on a measured brief showing the eight-family
+# floor is HIGHER than the seven-family one for a genuinely general agent. Eight families, eight
+# capabilities. (v1.0 promoted the two adaptation families the same morning.)
 FAMILIES = {
     "bandit":                (BanditEnv,          "exploration",            30),
     "gridnav":               (GridNavEnv,         "credit-assignment",      30),
@@ -367,17 +368,16 @@ FAMILIES = {
     "parity":                (ParityEnv,          "systematic-computation", 40),
     "changepoint":           (ChangePointEnv,     "adaptation-to-change",   40),
     "changepoint_sustained": (SustainedChangeEnv, "sustained-adaptation",   60),
+    "multirule":             (MultiRuleEnv,       "interference-resistance", 50),
 }
 
 # EXTENSION families: built, controlled, and measurable via measure(families=[...]) — but NOT yet in
 # the default declared universe, because adding a family re-baselines EVERY existing number (the floor
 # is a min; a new weakest family rewrites the headline). Promoting an extension into FAMILIES is a
 # deliberate re-versioning of the universe, made in the open, not a side effect of adding code.
-# (the first two extensions were promoted into FAMILIES 2026-07-09; the slot and its
-# promote-deliberately discipline continue)
-EXTENSION_FAMILIES = {
-    "multirule": (MultiRuleEnv, "interference-resistance", 50),
-}
+# (all three extensions to date were promoted into FAMILIES 2026-07-09; the slot and its
+# promote-deliberately discipline continue for the next family)
+EXTENSION_FAMILIES = {}
 
 
 def _family_spec(name):

@@ -7,7 +7,7 @@
 This is an instrument, not an intelligence. It never claims to measure AGI (the one formal definition
 of general intelligence, Legg–Hutter universal intelligence, is provably uncomputable — that is a named
 barrier, not an engineering obstacle). What it measures, exactly: how fast an agent's performance
-climbs on task instances it has **never seen**, within a declared experience budget, across seven
+climbs on task instances it has **never seen**, within a declared experience budget, across eight
 diagnostic families that each isolate one capability. Nothing beyond that declared universe is licensed.
 
 ## The design (reuse, not invention)
@@ -15,7 +15,8 @@ diagnostic families that each isolate one capability. Nothing beyond that declar
   (exploration) · seeded grid mazes, BFS-verified solvable (credit assignment) · hidden symbol
   bijections (rule induction) · cue/distractor/recall episodes (memory) · 4-bit parity (systematic
   computation) · unsignaled mid-stream rule switches (adaptation) · repeated regime changes at a
-  jittered cadence (sustained adaptation).
+  jittered cadence (sustained adaptation) · three conflicting rules over shared symbols
+  (interference resistance).
 - **Procedural freshness** (Procgen's move): every instance is generated from a seed at run time.
   There is nothing to memorize; a memorizer is structurally reduced to its true learning ability.
 - **Metric names from the transfer-RL literature** (arXiv:2009.07888): jumpstart, AULC (area under
@@ -85,6 +86,14 @@ universe, where the memory capability is structurally unlearnable for it, the sa
 only** (mean rises, floor memory-pinned near zero, `breadth_ratio` negative, `budget_to_floor` = `None`).
 More compute did not make it general — and the axis says so.
 
+## v1.1 — the eight-family universe (second promotion, same day)
+**multirule** joined the default universe the evening of the same day, by the same discipline: built
+as an extension, validated against its own planted failure class (a phase-blind learner that
+generalizes over the rule signal and collapses to majority-consistent mush), promoted on a measured
+brief — the eight-family floor for a genuinely general agent came out *higher* than the seven-family
+one, so the expansion strictly strengthens the claim. The extension slot is empty again; the
+discipline continues for family nine.
+
 ## v1.0 — the seven-family universe (re-versioned 2026-07-09)
 Both adaptation families below were built as **extensions**, validated against their own planted
 failure classes, and then **promoted into the default universe in one deliberate re-versioning
@@ -95,7 +104,7 @@ universe.
 
 ## v0.7 — extension families (the universe grows deliberately, not accidentally)
 `EXTENSION_FAMILIES` holds families that are **built, controlled, and measurable** but not yet in
-the default universe (the slot is currently empty — both first extensions were promoted) — because adding a family
+the default universe (the slot is currently empty — all three extensions to date were promoted) — because adding a family
 re-baselines every existing number (the floor is a min; a new weakest family rewrites the headline).
 Promoting an extension into `FAMILIES` is an explicit re-versioning of the declared universe, made in
 the open.
