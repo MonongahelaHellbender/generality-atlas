@@ -99,8 +99,8 @@ Both adaptation families below were built as **extensions**, validated against t
 failure classes, and then **promoted into the default universe in one deliberate re-versioning
 commit** — after a measured decision brief showed the expansion strictly strengthens the claim (a
 seven-capability floor subsumes the five-capability one) and before any earlier numbers had been
-published (retraction-free timing). Every number in this README is stated against the seven-family
-universe.
+published (retraction-free timing). (Superseded the same evening by v1.1 — numbers in this README
+are stated against the current eight-family universe unless a section says otherwise.)
 
 ## v0.7 — extension families (the universe grows deliberately, not accidentally)
 `EXTENSION_FAMILIES` holds families that are **built, controlled, and measurable** but not yet in
