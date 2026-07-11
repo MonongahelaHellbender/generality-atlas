@@ -1244,6 +1244,41 @@ def _selftest(verbose: bool = True) -> int:
               and len(env.train_pairs) == 8 and len(env.test_pairs) == 8,
               f"oracle={env.oracle_return} floor={env.random_return}")
 
+    # 14) CONSUMER-CONVENTION gates (insight #75 backport: a capability / non-regression claim is bound
+    #     to the SAMPLE it was measured on). Gates 9/10/12 validate changepoint / changepoint_sustained /
+    #     deepchain via measure_family(cp_seeds = Random(4242) × 6, agent_seed=99) — but the published
+    #     nine-family FLOOR and `--run` consume measure()'s OWN instance draws at the DEFAULT
+    #     master_seed=20260709 / n_instances=8 / agent_seed=master_seed+13: a DIFFERENT sample. The
+    #     between-sample gap is large in magnitude (gridnav 0.80 vs 0.60; the deepchain solver 0.49 on
+    #     cp_seeds vs 0.50 on the consumer draw), so a gate passing on cp_seeds says nothing about the
+    #     floor's convention. Each default-universe adaptation/exploration family is therefore ALSO gated
+    #     on the exact sample the consumer reads. Same conservative bars as the measure_family gates,
+    #     cleared with margin on the measured consumer draw — the property must hold on BOTH samples.
+    cc = measure(lambda a, s: TabularQAgent(a, s), master_seed=20260709, n_instances=8)
+    cc_slice = lambda m, sl: sum(m["curve"][sl:]) / len(m["curve"][sl:])  # noqa: E731
+    cc_cp, cc_su, cc_dc = (cc["profile"]["changepoint"], cc["profile"]["changepoint_sustained"],
+                           cc["profile"]["deepchain"])
+    check("changepoint on the CONSUMER draw adapts (measure()@20260709,n=8: AULC>=0.28 & post>=0.12)",
+          cc_cp["aulc"] >= 0.28 and cc_slice(cc_cp, CHANGEPOINT_POST_SLICE) >= 0.12,
+          f"aulc={cc_cp['aulc']} post={cc_slice(cc_cp, CHANGEPOINT_POST_SLICE):.3f}")
+    check("changepoint_sustained on the CONSUMER draw holds steady state (late>=0.10)",
+          cc_slice(cc_su, CHANGEPOINT_SUSTAINED_SLICE) >= 0.10,
+          f"late={cc_slice(cc_su, CHANGEPOINT_SUSTAINED_SLICE):.3f}")
+    check("deepchain eps-greedy myopia on the CONSUMER draw (tabular-Q AULC<=0.10)",
+          cc_dc["aulc"] <= 0.10, f"aulc={cc_dc['aulc']}")
+    # The deepchain SOLVER (optimistic-Q) on the consumer sample: replicate measure()'s exact full-
+    # universe seed draw (verified bit-identical to its profile) — NOT measure(families=["deepchain"]),
+    # which would hand deepchain the FIRST 8 draws instead of the draws it gets as the 9th family (a
+    # wrong-sample trap of exactly the #75(d) kind — a test that passes on the wrong inputs).
+    _rng = random.Random(20260709)
+    _iseeds = {f: [_rng.randrange(10**9) for _ in range(8)] for f in FAMILIES}
+    cc_do = measure_family(lambda a, s: OptimisticQAgent(a, s), "deepchain",
+                           _iseeds["deepchain"], agent_seed=20260709 + 13)
+    check("deepchain solver clears its bar on the CONSUMER draw (optimistic-Q AULC>=0.35)",
+          cc_do["aulc"] >= 0.35, f"aulc={cc_do['aulc']}")
+    check("deepchain deep-vs-myopic separation on the CONSUMER draw (>=0.30)",
+          cc_do["aulc"] - cc_dc["aulc"] >= 0.30, f"gap={cc_do['aulc'] - cc_dc['aulc']:.3f}")
+
     # 7) certificate path (honest either way)
     if _HAS_ATTEST:
         doc = attest_run(rnd)
