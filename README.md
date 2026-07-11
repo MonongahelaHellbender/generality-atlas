@@ -7,7 +7,7 @@
 This is an instrument, not an intelligence. It never claims to measure AGI (the one formal definition
 of general intelligence, Legg–Hutter universal intelligence, is provably uncomputable — that is a named
 barrier, not an engineering obstacle). What it measures, exactly: how fast an agent's performance
-climbs on task instances it has **never seen**, within a declared experience budget, across eight
+climbs on task instances it has **never seen**, within a declared experience budget, across nine
 diagnostic families that each isolate one capability. Nothing beyond that declared universe is licensed.
 
 ## The design (reuse, not invention)
@@ -16,7 +16,7 @@ diagnostic families that each isolate one capability. Nothing beyond that declar
   bijections (rule induction) · cue/distractor/recall episodes (memory) · 4-bit parity (systematic
   computation) · unsignaled mid-stream rule switches (adaptation) · repeated regime changes at a
   jittered cadence (sustained adaptation) · three conflicting rules over shared symbols
-  (interference resistance).
+  (interference resistance) · an N-step chain with reward only at the far end (deep exploration).
 - **Procedural freshness** (Procgen's move): every instance is generated from a seed at run time.
   There is nothing to memorize; a memorizer is structurally reduced to its true learning ability.
 - **Metric names from the transfer-RL literature** (arXiv:2009.07888): jumpstart, AULC (area under
@@ -80,31 +80,46 @@ weakest family improves = breadth) or only the MEAN (the strong families get str
 
 This makes budget an *assurance* axis, not a bare metric: it catches a "more compute → more general"
 claim that is really "more compute → narrower but deeper." The standing demonstration is the **same**
-tabular-Q learner shown two ways — on a universe it can cover (the four non-memory families) budget buys
-**breadth** (floor rises with the mean, `breadth_ratio` ≈ 0.85, target floor reached); on the **full**
-universe, where the memory capability is structurally unlearnable for it, the same budget buys **depth
-only** (mean rises, floor memory-pinned near zero, `breadth_ratio` negative, `budget_to_floor` = `None`).
-More compute did not make it general — and the axis says so.
+tabular-Q learner shown two ways — on a universe it can cover (bandit/gridnav/sequence/parity) budget
+buys **breadth** (floor rises with the mean, `breadth_ratio` ≈ 0.85, target floor reached); on the
+**full** universe, where two capabilities are structurally out of reach for it (memory — no cue
+representation; deep exploration — eps-greedy fails exponentially), the same budget buys **depth
+only** (mean rises, floor pinned near zero by the unlearnable capabilities, `breadth_ratio` ≈ 0.1,
+`budget_to_floor` = `None`). More compute did not make it general — and the axis says so.
+
+## v1.2 — the nine-family universe (third promotion: the hold-then-promote arc completes)
+**deepchain** joined the default universe on 2026-07-11 — and its path there is the discipline's
+best demonstration, because it ran in **both directions**. Built as an extension on 2026-07-10, it
+was **deliberately held**: the fresh-family test showed the strongest measured agent reading far
+below the family's own positive-control solver, so promotion then would have crashed the headline
+floor without informing anything — the family's verdict was "this capability is still missing," and
+the family's job was to referee the missing mechanism when it arrived. It arrived: a measured
+decision brief showed the nine-family floor is no longer deepchain-bound (the refereed mechanism now
+clears the family's own positive-control solver), so the expansion strengthens the claim instead of
+trading the headline for completeness. Universe growth stays deliberate in both directions —
+promoted when it strengthens the claim, held when the verdict is "still missing."
 
 ## v1.1 — the eight-family universe (second promotion, same day)
 **multirule** joined the default universe the evening of the same day, by the same discipline: built
 as an extension, validated against its own planted failure class (a phase-blind learner that
 generalizes over the rule signal and collapses to majority-consistent mush), promoted on a measured
 brief — the eight-family floor for a genuinely general agent came out *higher* than the seven-family
-one, so the expansion strictly strengthens the claim. The extension slot is empty again; the
-discipline continues for family nine.
+one, so the expansion strictly strengthens the claim. (Family nine, deepchain, followed two days
+later via the hold-then-promote arc above — numbers in this README are stated against the current
+nine-family universe unless a section says otherwise.)
 
 ## v1.0 — the seven-family universe (re-versioned 2026-07-09)
 Both adaptation families below were built as **extensions**, validated against their own planted
 failure classes, and then **promoted into the default universe in one deliberate re-versioning
 commit** — after a measured decision brief showed the expansion strictly strengthens the claim (a
 seven-capability floor subsumes the five-capability one) and before any earlier numbers had been
-published (retraction-free timing). (Superseded the same evening by v1.1 — numbers in this README
-are stated against the current eight-family universe unless a section says otherwise.)
+published (retraction-free timing). (Superseded the same evening by v1.1, and by v1.2 two days
+later — see those sections for the current universe.)
 
 ## v0.7 — extension families (the universe grows deliberately, not accidentally)
 `EXTENSION_FAMILIES` holds families that are **built, controlled, and measurable** but not yet in
-the default universe (the slot is currently empty — all three extensions to date were promoted) — because adding a family
+the default universe (the slot is currently empty — all four extensions to date were promoted, one
+after a deliberate hold) — because adding a family
 re-baselines every existing number (the floor is a min; a new weakest family rewrites the headline).
 Promoting an extension into `FAMILIES` is an explicit re-versioning of the declared universe, made in
 the open.
@@ -135,17 +150,18 @@ draw): steady-state readaptation. The planted failure is the plasticity-loss cla
 running-mean learner (α=1/n) whose never-forgetting values deadlock under repeated change (late
 slice below random, −0.07, vs fixed-step tabular-Q's steady +0.22).
 
-## Extension in the slot: deepchain (deep exploration) — holding deliberately
-Family nine, **deepchain** (bsuite's deep-sea design, reused not reinvented): an N-step chain where
-one per-instance action advances and the other resets, with reward only at the far end — the random
+## Family nine: deepchain (deep exploration) — held first, promoted when its referee job completed
+**deepchain** (bsuite's deep-sea design, reused not reinvented): an N-step chain where one
+per-instance action advances and the other resets, with reward only at the far end — the random
 floor is analytic and essentially zero (0.5^N). The positive control is an **optimistic-init
 bootstrapped Q** (untried paths look promising; value propagates backward — the classic solver);
 the displayed contrast is eps-greedy tabular-Q failing exponentially (0.49 vs 0.03, the
-myopic-exploration split made visible). It **holds in the extension slot deliberately**: the
-fresh-family test showed the strongest current agent reads well below the solver here, so promoting
-it now would crash the headline floor without informing anything — the family's job is to referee
-the deep-exploration mechanism when it arrives. Universe growth stays deliberate in both directions:
-promoted when it strengthens the claim, held when its verdict is "this capability is still missing."
+myopic-exploration split made visible). It sat in the extension slot **deliberately** while the
+strongest measured agent read well below the solver — promoting it then would have crashed the
+headline floor without informing anything — and was promoted (v1.2) only after the deep-exploration
+mechanism it existed to referee arrived and cleared the solver itself. A family can be a referee
+before it is a denominator; the promotion decision is part of the measurement discipline, not
+housekeeping.
 
 ## Run (zero dependencies — Python standard library)
 ```
@@ -161,7 +177,7 @@ Any agent that speaks the protocol can be measured: `act(obs) -> action`,
 
 ## Claim-licensing ledger (how claims scale with evidence — open-ended by design)
 1. **Claims are licensed by the declared universe and the measured evidence — nothing more, at any
-   given time.** Today's universe (five toy families, these budgets) licenses no claim about general
+   given time.** Today's universe (nine toy families, these budgets) licenses no claim about general
    intelligence. That is a statement about today's evidence, not a ceiling on the project.
 2. **The path to bigger claims is declared expansion.** Grow the family universe, the budgets, the
    difficulty axes, the transfer measurements — and what may honestly be claimed grows exactly as

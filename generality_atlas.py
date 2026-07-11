@@ -5,7 +5,7 @@ must catch before it is allowed to measure anything.
 
 WHAT THIS IS (and is not): an instrument, not an intelligence. Generality here is operationalized as
 Chollet's skill-acquisition efficiency — how fast performance climbs on task instances the agent has
-NEVER seen, within a declared experience budget — measured across eight diagnostic families, each
+NEVER seen, within a declared experience budget — measured across nine diagnostic families, each
 isolating ONE capability (bsuite's move), every instance procedurally generated fresh from a seed
 (Procgen's move: nothing to memorize), every score normalized against an analytic oracle and a random
 floor (no judge anywhere in the verdict path). The aggregate is the full profile plus the GENERALITY
@@ -385,11 +385,14 @@ class ChainEnv:
 # AULC stays near floor and the family cannot distinguish the capability it exists to isolate. Rule:
 # each family's budget must give an idealized learner room to both ACQUIRE and EXPLOIT within the
 # AULC window, or the family measures nothing.
-# v1.1 UNIVERSE (re-versioned 2026-07-09 evening, second deliberate promotion): multirule joined
-# after the same discipline — built as an extension, validated with its own planted-failure class
-# (the phase-blind interference victim), promoted on a measured brief showing the eight-family
-# floor is HIGHER than the seven-family one for a genuinely general agent. Eight families, eight
-# capabilities. (v1.0 promoted the two adaptation families the same morning.)
+# v1.2 UNIVERSE (re-versioned 2026-07-11, third deliberate promotion): deepchain joined after the
+# full arc of the discipline ran in BOTH directions — built as an extension 2026-07-10 and HELD
+# deliberately (the strongest measured agent then read far below the family's own positive-control
+# solver; promoting would have crashed the headline floor without informing anything), then promoted
+# once the deep-exploration mechanism it existed to referee arrived and a measured brief showed the
+# nine-family floor is no longer deepchain-bound — the expansion strengthens the claim instead of
+# trading the headline for completeness. Nine families, nine capabilities.
+# (v1.1 promoted multirule 2026-07-09 evening; v1.0 promoted the two adaptation families that morning.)
 FAMILIES = {
     "bandit":                (BanditEnv,          "exploration",            30),
     "gridnav":               (GridNavEnv,         "credit-assignment",      30),
@@ -399,19 +402,16 @@ FAMILIES = {
     "changepoint":           (ChangePointEnv,     "adaptation-to-change",   40),
     "changepoint_sustained": (SustainedChangeEnv, "sustained-adaptation",   60),
     "multirule":             (MultiRuleEnv,       "interference-resistance", 50),
+    "deepchain":             (ChainEnv,           "deep-exploration",       60),
 }
 
 # EXTENSION families: built, controlled, and measurable via measure(families=[...]) — but NOT yet in
 # the default declared universe, because adding a family re-baselines EVERY existing number (the floor
 # is a min; a new weakest family rewrites the headline). Promoting an extension into FAMILIES is a
 # deliberate re-versioning of the universe, made in the open, not a side effect of adding code.
-# (the first three extensions were promoted into FAMILIES 2026-07-09; deepchain HOLDS in the slot
-# deliberately: the fresh-family test showed the current best agent reads ~0.2-0.3 here — promoting
-# it before a deep-exploration mechanism exists would be honest but uninformative floor-crashing;
-# the family's job right now is to REFEREE that mechanism when it arrives)
-EXTENSION_FAMILIES = {
-    "deepchain": (ChainEnv, "deep-exploration", 60),
-}
+# (all four extensions to date were promoted — the slot is empty; deepchain's hold-then-promote arc
+# is the standing demonstration that the discipline runs in both directions)
+EXTENSION_FAMILIES = {}
 
 
 def _family_spec(name):
@@ -712,9 +712,11 @@ def measure(agent_factory, master_seed: int = 20260709, n_instances: int = 8,
         "floor_family": min(aulcs, key=aulcs.get),
         "generality_mean": round(sum(aulcs.values()) / len(aulcs), 4),
         "scope_cells": scope,
-        "boundary": ("Scores are complete relative to THIS declared universe (five toy families, "
-                     "these budgets, these seeds) — nothing beyond it is licensed. The floor is the "
-                     "headline; a high mean with a low floor is narrowness, not generality."),
+        # dynamic family count: this string was caught reading "five" two re-versionings after the
+        # universe left five — a boundary statement that can rot is a boundary statement that lies
+        "boundary": (f"Scores are complete relative to THIS declared universe ({len(families)} toy "
+                     "families, these budgets, these seeds) — nothing beyond it is licensed. The floor "
+                     "is the headline; a high mean with a low floor is narrowness, not generality."),
     }
 
 
@@ -1070,7 +1072,9 @@ def _selftest(verbose: bool = True) -> int:
     mr_q2 = measure_family(lambda a, s: TabularQAgent(a, s), "multirule", cp_seeds, agent_seed=99)
     check("multirule reproducibility (same seeds => identical)", mr_q == mr_q2)
 
-    # 12) EXTENSION family: deepchain (deep/committed exploration — bsuite's deep-sea, reused).
+    # 12) deepchain (deep/committed exploration — bsuite's deep-sea, reused; PROMOTED into the
+    #     default universe 2026-07-11 after its referee job completed — held as an extension until
+    #     the deep-exploration mechanism it existed to referee arrived).
     #     Positive control = optimistic-init bootstrapped Q (the classic solver); the displayed
     #     contrast is eps-greedy tabular-Q failing exponentially — myopic exploration made visible.
     dc_o = measure_family(lambda a, s: OptimisticQAgent(a, s), "deepchain", cp_seeds, agent_seed=99)
