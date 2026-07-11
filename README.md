@@ -118,8 +118,8 @@ later — see those sections for the current universe.)
 
 ## v0.7 — extension families (the universe grows deliberately, not accidentally)
 `EXTENSION_FAMILIES` holds families that are **built, controlled, and measurable** but not yet in
-the default universe (the slot is currently empty — all four extensions to date were promoted, one
-after a deliberate hold) — because adding a family
+the default universe (all four prior extensions were promoted, one after a deliberate hold; family
+ten, **compose**, now holds the slot) — because adding a family
 re-baselines every existing number (the floor is a min; a new weakest family rewrites the headline).
 Promoting an extension into `FAMILIES` is an explicit re-versioning of the declared universe, made in
 the open.
@@ -162,6 +162,21 @@ headline floor without informing anything — and was promoted (v1.2) only after
 mechanism it existed to referee arrived and cleared the solver itself. A family can be a referee
 before it is a denominator; the promotion decision is part of the measurement discipline, not
 housekeeping.
+
+## Extension in the slot: compose (compositionality)
+Family ten, **compose**: per-instance hidden primitive bijections over a shared alphabet; rounds ask
+either a single hop (apply g_i) or a composition (apply g_i then g_j). The pair space is split
+per-instance — the training phase mixes single hops with compositions from one half; then, at a
+per-instance randomized switch, every round draws from the **held-out half: compositions never seen
+before**. The capability-isolating signal is the post-switch slice, and the design makes the split
+arithmetic explicit: m·k primitive facts generate all m²·k composed answers, so for a compositional
+learner the held-out half is **free** (the built-in reference answers it at ~1.0 immediately, having
+learned only the hops), while a pair-memorizer starts from scratch on every unseen pair (tabular-Q
+reads ~0.28 on the same slice — the combinatorial-generalization gap made visible, the same gap
+ARC-style evaluation targets). Unlike changepoint, the post slice grants **no relearn burn-in**:
+the capability is answering without relearning, so relearn time would erase the signal being
+measured. It holds in the extension slot pending its referee verdict on the current seed agent —
+promotion is a separate, deliberate re-versioning, as always.
 
 ## Run (zero dependencies — Python standard library)
 ```

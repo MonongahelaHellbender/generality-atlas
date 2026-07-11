@@ -378,6 +378,71 @@ class ChainEnv:
         return self._pos, (1.0 if self._pos >= self.length else 0.0), done
 
 
+# Conservative curve slices for the compose family, valid for EVERY instance regardless of its drawn
+# switch episode (16..20): pre-slice ends before the earliest possible switch; post-slice starts
+# just past the latest. Unlike changepoint (where burn-in is granted so an ADAPTER can recover),
+# the post slice here starts almost immediately — the capability is answering held-out pairs
+# WITHOUT relearning, so granting relearn time would erase the signal being measured.
+COMPOSE_PRE_SLICE = 16       # curve[:16]  = training phase for all instances
+COMPOSE_POST_SLICE = 22      # curve[22:]  = held-out-pairs phase for all instances
+
+
+class CompositionEnv:
+    """Hidden per-seed primitive bijections g_1..g_m over a shared alphabet; rounds ask either a
+    SINGLE hop (obs ('s', i, x) -> answer g_i(x)) or a COMPOSITION (obs ('c', i, j, x) -> answer
+    g_j(g_i(x))). The pair space is split per-seed: the training phase mixes single-op rounds with
+    compositions from the TRAIN half; after switch_after episodes (drawn 16..20 per instance — a
+    referee's incidental regularities are attack surface), every round is a composition from the
+    HELD-OUT half, never seen before. Capability: COMPOSITIONALITY — m*k primitive facts generate
+    all m^2*k composed answers, so for a compositional learner the held-out half is FREE, while a
+    pair-memorizer starts from scratch on every unseen pair. The capability-isolating signal is the
+    POST slice (COMPOSE_POST_SLICE): whole-window AULC can be padded by training-phase memorization
+    while combinatorial generalization is zero."""
+    def __init__(self, seed: int, alphabet: int = 5, n_ops: int = 4, rounds: int = 12,
+                 switch_after: int | None = None):
+        rng = random.Random(seed)
+        self.alphabet, self.n_ops, self.rounds = alphabet, n_ops, rounds
+        self.ops = []
+        for _ in range(n_ops):
+            m = list(range(alphabet))
+            rng.shuffle(m)
+            self.ops.append(m)
+        pairs = [(i, j) for i in range(n_ops) for j in range(n_ops)]
+        rng.shuffle(pairs)
+        self.train_pairs = pairs[:len(pairs) // 2]
+        self.test_pairs = pairs[len(pairs) // 2:]
+        self.switch_after = switch_after if switch_after is not None else rng.randint(16, 20)
+        self.actions = list(range(alphabet))
+        self.oracle_return = float(rounds)
+        self.random_return = rounds / alphabet
+        self._rng = random.Random(seed + 7)
+        self._episodes = 0
+
+    def _draw_round(self):
+        if self._episodes <= self.switch_after:
+            if self._rng.random() < 0.5:                    # single hop: the primitive is learnable
+                i = self._rng.randrange(self.n_ops)
+                x = self._rng.randrange(self.alphabet)
+                self._answer = self.ops[i][x]
+                return ("s", i, x)
+            i, j = self.train_pairs[self._rng.randrange(len(self.train_pairs))]
+        else:                                               # held-out compositions ONLY
+            i, j = self.test_pairs[self._rng.randrange(len(self.test_pairs))]
+        x = self._rng.randrange(self.alphabet)
+        self._answer = self.ops[j][self.ops[i][x]]
+        return ("c", i, j, x)
+
+    def reset(self):
+        self._episodes += 1
+        self._t = 0
+        return self._draw_round()
+
+    def step(self, action):
+        reward = 1.0 if action == self._answer else 0.0     # grade BEFORE drawing the next round
+        self._t += 1
+        return self._draw_round(), reward, self._t >= self.rounds
+
+
 # family registry: name -> (constructor, capability tag, episodes budget)
 # Budget calibration is part of the instrument's validity (learned the hard way, 2026-07-09): the
 # memory family's original 25-episode budget was information-theoretically too tight — 5 cues x 5
@@ -409,9 +474,14 @@ FAMILIES = {
 # the default declared universe, because adding a family re-baselines EVERY existing number (the floor
 # is a min; a new weakest family rewrites the headline). Promoting an extension into FAMILIES is a
 # deliberate re-versioning of the universe, made in the open, not a side effect of adding code.
-# (all four extensions to date were promoted — the slot is empty; deepchain's hold-then-promote arc
-# is the standing demonstration that the discipline runs in both directions)
-EXTENSION_FAMILIES = {}
+# (all four prior extensions were promoted — deepchain's hold-then-promote arc is the standing
+# demonstration that the discipline runs in both directions. Family ten, compose, now holds the
+# slot: built 2026-07-11 to referee COMPOSITIONALITY — the ARC-adjacent capability of combining
+# known parts into never-seen combinations. Its verdict on the current seed decides the next
+# mechanism; promotion is a separate deliberate decision, as always.)
+EXTENSION_FAMILIES = {
+    "compose": (CompositionEnv, "compositionality", 40),
+}
 
 
 def _family_spec(name):
@@ -593,6 +663,60 @@ class PhaseBlindAgent:
 
     def episode_end(self):
         self.inner.episode_end()
+
+
+class CompositionalRefAgent:
+    """POSITIVE-CONTROL reference for the compose family: learns each primitive hop from bandit
+    feedback (systematic candidate elimination per cell — a wrong answer eliminates that symbol),
+    then answers NEVER-SEEN composed pairs by running its learned primitives twice. Composed rounds
+    also back-fill primitive knowledge: if g_i(x)=y is known, a correct composed answer reveals
+    g_j(y), and a wrong one eliminates a candidate for it. This is what the family exists to
+    display: m*k learned facts generate all m^2*k composed answers, so the held-out half of the
+    pair space costs a compositional learner NOTHING."""
+    def __init__(self, actions, seed: int):
+        self.actions = list(actions)
+        self._rng = random.Random(seed)
+        self.known = {}          # ("p", op, x) -> g_op(x), confirmed by reward
+        self.tried = {}          # question cell -> eliminated answers
+
+    def _guess(self, cell):
+        t = self.tried.setdefault(cell, set())
+        untried = [a for a in self.actions if a not in t]
+        return self._rng.choice(untried or self.actions)
+
+    def act(self, obs):
+        if obs[0] == "s":
+            _, i, x = obs
+            got = self.known.get(("p", i, x))
+            return got if got is not None else self._guess(("s", i, x))
+        _, i, j, x = obs
+        y = self.known.get(("p", i, x))
+        if y is not None:
+            z = self.known.get(("p", j, y))
+            if z is not None:
+                return z                                   # composition: two known hops, zero cost
+        return self._guess(("c", i, j, x))
+
+    def update(self, obs, action, reward, next_obs, done):
+        if obs[0] == "s":
+            _, i, x = obs
+            if reward == 1:
+                self.known[("p", i, x)] = action
+            else:
+                self.tried.setdefault(("s", i, x), set()).add(action)
+            return
+        _, i, j, x = obs
+        y = self.known.get(("p", i, x))
+        if reward == 1:
+            if y is not None:
+                self.known[("p", j, y)] = action           # back-fill the second hop
+        else:
+            self.tried.setdefault(("c", i, j, x), set()).add(action)
+            if y is not None:
+                self.tried.setdefault(("s", j, y), set()).add(action)
+
+    def episode_end(self):
+        pass
 
 
 class OptimisticQAgent:
@@ -1090,6 +1214,35 @@ def _selftest(verbose: bool = True) -> int:
           dc_o["aulc"] - dc_q["aulc"] >= 0.30, f"gap={dc_o['aulc'] - dc_q['aulc']:.3f}")
     dc_o2 = measure_family(lambda a, s: OptimisticQAgent(a, s), "deepchain", cp_seeds, agent_seed=99)
     check("deepchain reproducibility (same seeds => identical)", dc_o == dc_o2)
+
+    # 13) EXTENSION family: compose (compositionality — combining known parts into never-seen
+    #     combinations, the ARC-adjacent capability). Positive control = a compositional reference
+    #     that learns primitive hops under bandit feedback and answers HELD-OUT pair compositions
+    #     by running two known hops (post-slice ~1.0 measured — the held-out half is free). The
+    #     displayed failure is the pair-memorizer signature: tabular-Q keys on full triples, so
+    #     every held-out pair starts from scratch (post ~0.28 measured). Gates leave headroom.
+    co_seeds = [random.Random(4242).randrange(10**9) for _ in range(6)]
+    co_post = lambda m: (sum(m["curve"][COMPOSE_POST_SLICE:])
+                         / len(m["curve"][COMPOSE_POST_SLICE:]))
+    co_r = measure_family(lambda a, s: RandomAgent(a, s), "compose", co_seeds, agent_seed=99)
+    co_q = measure_family(lambda a, s: TabularQAgent(a, s), "compose", co_seeds, agent_seed=99)
+    co_c = measure_family(lambda a, s: CompositionalRefAgent(a, s), "compose", co_seeds, agent_seed=99)
+    check("compose: random control flat (harness symmetric across the pair-holdout switch)",
+          abs(co_r["aulc"]) <= 0.10 and abs(co_post(co_r)) <= 0.10,
+          f"aulc={co_r['aulc']} post={co_post(co_r):+.3f}")
+    check("compose: compositional reference answers HELD-OUT pairs at once (post >= 0.85)",
+          co_post(co_c) >= 0.85, f"post={co_post(co_c):+.3f}")
+    check("compose: pair-memorizer displayed (tabular-Q post <= 0.45 — every unseen pair from scratch)",
+          co_post(co_q) <= 0.45, f"post={co_post(co_q):+.3f}")
+    check("compose: compositional-vs-memorizer separation unmistakable (>= 0.40 post)",
+          co_post(co_c) - co_post(co_q) >= 0.40, f"gap={co_post(co_c) - co_post(co_q):.3f}")
+    co_c2 = measure_family(lambda a, s: CompositionalRefAgent(a, s), "compose", co_seeds, agent_seed=99)
+    check("compose reproducibility (same seeds => identical)", co_c == co_c2)
+    for s in (11, 222, 3333):
+        env = CompositionEnv(s)
+        check(f"compose env-sanity :{s}", env.oracle_return > env.random_return
+              and len(env.train_pairs) == 8 and len(env.test_pairs) == 8,
+              f"oracle={env.oracle_return} floor={env.random_return}")
 
     # 7) certificate path (honest either way)
     if _HAS_ATTEST:
