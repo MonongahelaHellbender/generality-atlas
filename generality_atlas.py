@@ -5,7 +5,7 @@ must catch before it is allowed to measure anything.
 
 WHAT THIS IS (and is not): an instrument, not an intelligence. Generality here is operationalized as
 Chollet's skill-acquisition efficiency — how fast performance climbs on task instances the agent has
-NEVER seen, within a declared experience budget — measured across nine diagnostic families, each
+NEVER seen, within a declared experience budget — measured across ten diagnostic families, each
 isolating ONE capability (bsuite's move), every instance procedurally generated fresh from a seed
 (Procgen's move: nothing to memorize), every score normalized against an analytic oracle and a random
 floor (no judge anywhere in the verdict path). The aggregate is the full profile plus the GENERALITY
@@ -458,6 +458,15 @@ class CompositionEnv:
 # nine-family floor is no longer deepchain-bound — the expansion strengthens the claim instead of
 # trading the headline for completeness. Nine families, nine capabilities.
 # (v1.1 promoted multirule 2026-07-09 evening; v1.0 promoted the two adaptation families that morning.)
+# v1.3 UNIVERSE (re-versioned 2026-07-11 evening, fourth deliberate promotion): compose joined the
+# same day it was built — the fastest referee-to-denominator arc yet, because the mechanism it
+# refereed (v9 compositional licensing) arrived within hours of its verdict. PRICED IN THE OPEN,
+# not free: the ten-family floor mean is 0.5618 vs the nine-family 0.5913 (-0.0295), compose
+# binding on 3 of 5 holdout masters (0.526/0.546/0.606 on measure()'s own draws) — a deliberate
+# trade of headline for a tenth capability (combinatorial generalization, the ARC-adjacent one) on
+# which the subject agent reads within reach of the family's own reference composer. Ten families,
+# ten capabilities. NOTE: compose is appended LAST, so every incumbent family's instance-seed draws
+# from measure() are unchanged — no existing number moves except the min.
 FAMILIES = {
     "bandit":                (BanditEnv,          "exploration",            30),
     "gridnav":               (GridNavEnv,         "credit-assignment",      30),
@@ -468,20 +477,17 @@ FAMILIES = {
     "changepoint_sustained": (SustainedChangeEnv, "sustained-adaptation",   60),
     "multirule":             (MultiRuleEnv,       "interference-resistance", 50),
     "deepchain":             (ChainEnv,           "deep-exploration",       60),
+    "compose":               (CompositionEnv,     "compositionality",       40),
 }
 
 # EXTENSION families: built, controlled, and measurable via measure(families=[...]) — but NOT yet in
 # the default declared universe, because adding a family re-baselines EVERY existing number (the floor
 # is a min; a new weakest family rewrites the headline). Promoting an extension into FAMILIES is a
 # deliberate re-versioning of the universe, made in the open, not a side effect of adding code.
-# (all four prior extensions were promoted — deepchain's hold-then-promote arc is the standing
-# demonstration that the discipline runs in both directions. Family ten, compose, now holds the
-# slot: built 2026-07-11 to referee COMPOSITIONALITY — the ARC-adjacent capability of combining
-# known parts into never-seen combinations. Its verdict on the current seed decides the next
-# mechanism; promotion is a separate deliberate decision, as always.)
-EXTENSION_FAMILIES = {
-    "compose": (CompositionEnv, "compositionality", 40),
-}
+# (all five extensions to date were promoted — one after a deliberate hold, one priced as an open
+# floor trade; the slot is empty. The natural next candidate: a family where factored structure
+# itself must be DISCOVERED — the representation frontier the compose arc pointed at.)
+EXTENSION_FAMILIES = {}
 
 
 def _family_spec(name):
@@ -1215,7 +1221,7 @@ def _selftest(verbose: bool = True) -> int:
     dc_o2 = measure_family(lambda a, s: OptimisticQAgent(a, s), "deepchain", cp_seeds, agent_seed=99)
     check("deepchain reproducibility (same seeds => identical)", dc_o == dc_o2)
 
-    # 13) EXTENSION family: compose (compositionality — combining known parts into never-seen
+    # 13) compose (compositionality — PROMOTED into the default universe 2026-07-11 evening, v1.3 — combining known parts into never-seen
     #     combinations, the ARC-adjacent capability). Positive control = a compositional reference
     #     that learns primitive hops under bandit feedback and answers HELD-OUT pair compositions
     #     by running two known hops (post-slice ~1.0 measured — the held-out half is free). The

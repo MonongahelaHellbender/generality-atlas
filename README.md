@@ -7,7 +7,7 @@
 This is an instrument, not an intelligence. It never claims to measure AGI (the one formal definition
 of general intelligence, Legg–Hutter universal intelligence, is provably uncomputable — that is a named
 barrier, not an engineering obstacle). What it measures, exactly: how fast an agent's performance
-climbs on task instances it has **never seen**, within a declared experience budget, across nine
+climbs on task instances it has **never seen**, within a declared experience budget, across ten
 diagnostic families that each isolate one capability. Nothing beyond that declared universe is licensed.
 
 ## The design (reuse, not invention)
@@ -16,7 +16,9 @@ diagnostic families that each isolate one capability. Nothing beyond that declar
   bijections (rule induction) · cue/distractor/recall episodes (memory) · 4-bit parity (systematic
   computation) · unsignaled mid-stream rule switches (adaptation) · repeated regime changes at a
   jittered cadence (sustained adaptation) · three conflicting rules over shared symbols
-  (interference resistance) · an N-step chain with reward only at the far end (deep exploration).
+  (interference resistance) · an N-step chain with reward only at the far end (deep exploration) ·
+  hidden primitive bijections whose held-out compositions must be answered without relearning
+  (compositionality).
 - **Procedural freshness** (Procgen's move): every instance is generated from a seed at run time.
   There is nothing to memorize; a memorizer is structurally reduced to its true learning ability.
 - **Metric names from the transfer-RL literature** (arXiv:2009.07888): jumpstart, AULC (area under
@@ -87,6 +89,16 @@ representation; deep exploration — eps-greedy fails exponentially), the same b
 only** (mean rises, floor pinned near zero by the unlearnable capabilities, `breadth_ratio` ≈ 0.1,
 `budget_to_floor` = `None`). More compute did not make it general — and the axis says so.
 
+## v1.3 — the ten-family universe (fourth promotion: priced in the open, not free)
+**compose** was promoted the same day it was built — the fastest referee-to-denominator arc yet,
+because the mechanism it existed to referee arrived within hours of its verdict. And unlike the
+prior promotions, this one is an **openly priced floor trade**: the ten-family floor is lower than
+the nine-family one (compose binds on a majority of holdout seeds), traded deliberately for a tenth
+capability — combinatorial generalization, the one ARC-style evaluation targets — on which the
+subject agent now reads within reach of the family's own reference composer. The claim-licensing
+rule is unchanged: the headline moved DOWN and says so; a universe that only ever grows when it
+flatters the number would be a marketing instrument, not a measurement one.
+
 ## v1.2 — the nine-family universe (third promotion: the hold-then-promote arc completes)
 **deepchain** joined the default universe on 2026-07-11 — and its path there is the discipline's
 best demonstration, because it ran in **both directions**. Built as an extension on 2026-07-10, it
@@ -118,8 +130,8 @@ later — see those sections for the current universe.)
 
 ## v0.7 — extension families (the universe grows deliberately, not accidentally)
 `EXTENSION_FAMILIES` holds families that are **built, controlled, and measurable** but not yet in
-the default universe (all four prior extensions were promoted, one after a deliberate hold; family
-ten, **compose**, now holds the slot) — because adding a family
+the default universe (all five extensions to date were promoted — one after a deliberate hold, one
+as an openly priced floor trade; the slot is currently empty) — because adding a family
 re-baselines every existing number (the floor is a min; a new weakest family rewrites the headline).
 Promoting an extension into `FAMILIES` is an explicit re-versioning of the declared universe, made in
 the open.
@@ -163,8 +175,8 @@ mechanism it existed to referee arrived and cleared the solver itself. A family 
 before it is a denominator; the promotion decision is part of the measurement discipline, not
 housekeeping.
 
-## Extension in the slot: compose (compositionality)
-Family ten, **compose**: per-instance hidden primitive bijections over a shared alphabet; rounds ask
+## Family ten: compose (compositionality) — promoted the day it was built (v1.3)
+**compose**: per-instance hidden primitive bijections over a shared alphabet; rounds ask
 either a single hop (apply g_i) or a composition (apply g_i then g_j). The pair space is split
 per-instance — the training phase mixes single hops with compositions from one half; then, at a
 per-instance randomized switch, every round draws from the **held-out half: compositions never seen
@@ -175,8 +187,10 @@ learned only the hops), while a pair-memorizer starts from scratch on every unse
 reads ~0.28 on the same slice — the combinatorial-generalization gap made visible, the same gap
 ARC-style evaluation targets). Unlike changepoint, the post slice grants **no relearn burn-in**:
 the capability is answering without relearning, so relearn time would erase the signal being
-measured. It holds in the extension slot pending its referee verdict on the current seed agent —
-promotion is a separate, deliberate re-versioning, as always.
+measured. Its referee verdict landed within the hour (the subject agent read as a pair-memorizer,
+at half the reference composer) and prescribed the compositional-licensing mechanism that then
+cleared it — after which it was promoted as an openly priced trade (v1.3). The extension slot is
+empty; the natural next candidate is a family where factored structure itself must be discovered.
 
 ## Run (zero dependencies — Python standard library)
 ```
@@ -192,7 +206,7 @@ Any agent that speaks the protocol can be measured: `act(obs) -> action`,
 
 ## Claim-licensing ledger (how claims scale with evidence — open-ended by design)
 1. **Claims are licensed by the declared universe and the measured evidence — nothing more, at any
-   given time.** Today's universe (nine toy families, these budgets) licenses no claim about general
+   given time.** Today's universe (ten toy families, these budgets) licenses no claim about general
    intelligence. That is a statement about today's evidence, not a ceiling on the project.
 2. **The path to bigger claims is declared expansion.** Grow the family universe, the budgets, the
    difficulty axes, the transfer measurements — and what may honestly be claimed grows exactly as
