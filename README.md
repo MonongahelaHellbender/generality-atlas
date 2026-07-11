@@ -130,8 +130,8 @@ later — see those sections for the current universe.)
 
 ## v0.7 — extension families (the universe grows deliberately, not accidentally)
 `EXTENSION_FAMILIES` holds families that are **built, controlled, and measurable** but not yet in
-the default universe (all five extensions to date were promoted — one after a deliberate hold, one
-as an openly priced floor trade; the slot is currently empty) — because adding a family
+the default universe (five extensions promoted so far — one after a deliberate hold, one as an
+openly priced floor trade; family eleven, **factored**, now holds the slot) — because adding a family
 re-baselines every existing number (the floor is a min; a new weakest family rewrites the headline).
 Promoting an extension into `FAMILIES` is an explicit re-versioning of the declared universe, made in
 the open.
@@ -191,6 +191,27 @@ measured. Its referee verdict landed within the hour (the subject agent read as 
 at half the reference composer) and prescribed the compositional-licensing mechanism that then
 cleared it — after which it was promoted as an openly priced trade (v1.3). The extension slot is
 empty; the natural next candidate is a family where factored structure itself must be discovered.
+
+## Extension in the slot: factored (factored-structure discovery)
+Family eleven, **factored** — the representation frontier the compose arc pointed at. In compose,
+the factored structure was handed to the agent syntactically (the observation's slots name the
+primitives being composed); here there are only **opaque codes** and three question types, and the
+structure exists purely in behavior: question B's answer is determined by the code's A and S
+answers through a hidden per-instance relation (the relation is drawn per instance — a fixed rule
+would be a hardcodable regularity). The training phase asks A and S everywhere and B only on train
+codes, whose answer pairs tile the relation's whole domain (identifiability by construction);
+after a randomized switch, every round is a B question on a code where **B was never asked**. The
+capability-isolating signal is an **EARLY post slice** — and that slice was itself found by
+measurement, sequence recorded: the first cut gated the whole post window, and a fast tabular
+relearner scored 0.7+ on a capability defined as answering *without* relearning (the whole-window
+padding failure class, one level finer), so the isolating criterion was re-derived from the
+controls — the reference must read ~1.0 before relearning could pay, the memorizer near its
+starting point. On that slice the built-in relational reference (confirm answers by elimination,
+fill the relation table from confirmed triples, derive held-out B answers) reads ~0.97 and
+tabular-Q ~0.35. Functional-dependency discovery is a classic problem (reuse, not invention); the
+packaging is the referee protocol: control-derived isolating slice, planted memorizer display,
+controls gated before any measurement is trusted. It holds in the extension slot pending its referee verdict
+on the subject agent — promotion is a separate, deliberate re-versioning, as always.
 
 ## Run (zero dependencies — Python standard library)
 ```

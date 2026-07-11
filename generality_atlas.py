@@ -443,6 +443,90 @@ class CompositionEnv:
         return self._draw_round(), reward, self._t >= self.rounds
 
 
+# Conservative curve slices for the factored family (same tense logic as compose, insight #79:
+# the capability is answering WITHOUT relearning, so the post slice starts almost immediately —
+# relearn burn-in would erase the signal being measured).
+FACTORED_PRE_SLICE = 16       # curve[:16]   = training phase for all instances
+FACTORED_POST_SLICE = 21      # curve[21:]   = held-out-B phase for all instances (switch drawn 18..20)
+FACTORED_EARLY_END = 25       # curve[21:25] = the ISOLATING slice: posts 1-7 for every draw, before
+#   relearning can pay. Found by measurement, sequence recorded: the first cut's whole post window
+#   (12 held-out keys, 18 episodes) leaked RELEARN credit — a fast tabular relearner scored 0.7+ on
+#   a capability defined as answering WITHOUT relearning (the whole-window-padding failure class,
+#   one level finer). The isolating criterion is control-defined: the reference must read ~1.0 here
+#   and the memorizer near its starting point; the subject's verdict then falls where it falls.
+
+
+class FactoredRelationEnv:
+    """OPAQUE codes (plain ints — no slot structure to read), three question types over them:
+    obs ('A', c) and ('S', c) have free per-instance random answers; obs ('B', c) is DETERMINED by
+    a hidden per-instance relation, ansB(c) = R[ansA(c)][ansS(c)]. Unlike compose, nothing in the
+    observation reveals the structure — the functional dependency must be DISCOVERED from behavior.
+    Capability: FACTORED-STRUCTURE DISCOVERY (the representation frontier: B's answer factors
+    through the other two answers, and only an agent that finds that factorization can answer B on
+    codes where B was never asked).
+
+    Protocol: the training phase asks A and S on ALL codes and B on the TRAIN codes only, whose
+    (ansA, ansS) pairs TILE all k*k relation cells (identifiability by construction); after a
+    per-instance randomized switch (16..20), every round is a B question on a HELD-OUT code. The
+    relation R is drawn per instance — a fixed rule (e.g. modular addition) would be a hardcodable
+    regularity, and a referee's incidental regularities are attack surface."""
+    def __init__(self, seed: int, alphabet: int = 4, n_codes: int = 32, n_train: int = 16,
+                 rounds: int = 14, switch_after: int | None = None):
+        rng = random.Random(seed)
+        self.alphabet, self.rounds = alphabet, rounds
+        codes = list(range(n_codes))
+        rng.shuffle(codes)
+        self.train_codes = codes[:n_train]
+        self.test_codes = codes[n_train:]
+        cells = [(a, s) for a in range(alphabet) for s in range(alphabet)]
+        rng.shuffle(cells)
+        self.ansA, self.ansS = {}, {}
+        for i, c in enumerate(self.train_codes):            # train codes tile the relation domain
+            a, s = cells[i % len(cells)]
+            self.ansA[c], self.ansS[c] = a, s
+        for c in self.test_codes:
+            self.ansA[c] = rng.randrange(alphabet)
+            self.ansS[c] = rng.randrange(alphabet)
+        self.R = [[rng.randrange(alphabet) for _ in range(alphabet)] for _ in range(alphabet)]
+        self.switch_after = switch_after if switch_after is not None else rng.randint(18, 20)
+        self.actions = list(range(alphabet))
+        self.oracle_return = float(rounds)
+        self.random_return = rounds / alphabet
+        self._rng = random.Random(seed + 7)
+        self._episodes = 0
+
+    def _ansB(self, c):
+        return self.R[self.ansA[c]][self.ansS[c]]
+
+    def _draw_round(self):
+        if self._episodes <= self.switch_after:
+            kind = self._rng.randrange(3)
+            if kind == 0:
+                c = self.train_codes[self._rng.randrange(len(self.train_codes))]
+                self._answer = self._ansB(c)
+                return ("B", c)
+            pool = self.train_codes + self.test_codes       # A and S are asked EVERYWHERE
+            c = pool[self._rng.randrange(len(pool))]
+            if kind == 1:
+                self._answer = self.ansA[c]
+                return ("A", c)
+            self._answer = self.ansS[c]
+            return ("S", c)
+        c = self.test_codes[self._rng.randrange(len(self.test_codes))]
+        self._answer = self._ansB(c)                        # held-out B ONLY after the switch
+        return ("B", c)
+
+    def reset(self):
+        self._episodes += 1
+        self._t = 0
+        return self._draw_round()
+
+    def step(self, action):
+        reward = 1.0 if action == self._answer else 0.0
+        self._t += 1
+        return self._draw_round(), reward, self._t >= self.rounds
+
+
 # family registry: name -> (constructor, capability tag, episodes budget)
 # Budget calibration is part of the instrument's validity (learned the hard way, 2026-07-09): the
 # memory family's original 25-episode budget was information-theoretically too tight — 5 cues x 5
@@ -484,10 +568,16 @@ FAMILIES = {
 # the default declared universe, because adding a family re-baselines EVERY existing number (the floor
 # is a min; a new weakest family rewrites the headline). Promoting an extension into FAMILIES is a
 # deliberate re-versioning of the universe, made in the open, not a side effect of adding code.
-# (all five extensions to date were promoted — one after a deliberate hold, one priced as an open
-# floor trade; the slot is empty. The natural next candidate: a family where factored structure
-# itself must be DISCOVERED — the representation frontier the compose arc pointed at.)
-EXTENSION_FAMILIES = {}
+# (all five prior extensions were promoted — one after a deliberate hold, one priced as an open
+# floor trade. Family eleven, factored, now holds the slot: built 2026-07-11 evening to referee
+# FACTORED-STRUCTURE DISCOVERY — unlike compose, where the factored structure was handed over in
+# the observation's slots, here the structure exists only in BEHAVIOR (a hidden functional
+# dependency between question types over opaque codes) and must be discovered to answer questions
+# that were never asked. Its verdict on the current seed decides v10; promotion is a separate
+# deliberate decision, as always.)
+EXTENSION_FAMILIES = {
+    "factored": (FactoredRelationEnv, "factored-structure-discovery", 40),
+}
 
 
 def _family_spec(name):
@@ -720,6 +810,53 @@ class CompositionalRefAgent:
             self.tried.setdefault(("c", i, j, x), set()).add(action)
             if y is not None:
                 self.tried.setdefault(("s", j, y), set()).add(action)
+
+    def episode_end(self):
+        pass
+
+
+class RelationalRefAgent:
+    """POSITIVE-CONTROL reference for the factored family: learns each (question, code) answer by
+    candidate elimination under bandit feedback; from every train code whose A, S, and B answers are
+    all confirmed it fills one cell of the relation table R_hat[ansA][ansS] -> ansB; and for a code
+    whose B was NEVER asked it answers B by running the discovered factorization: look up its own
+    confirmed A and S answers, then R_hat. This is what the family exists to display — the B answer
+    factors through the other two, and finding that structure makes the held-out codes free."""
+    def __init__(self, actions, seed: int):
+        self.actions = list(actions)
+        self._rng = random.Random(seed)
+        self.known = {}          # (q, c) -> confirmed answer
+        self.tried = {}          # (q, c) -> eliminated answers
+        self.rel = {}            # (ansA, ansS) -> ansB, from fully-confirmed train triples
+
+    def _guess(self, cell):
+        t = self.tried.setdefault(cell, set())
+        untried = [a for a in self.actions if a not in t]
+        return self._rng.choice(untried or self.actions)
+
+    def act(self, obs):
+        got = self.known.get(obs)
+        if got is not None:
+            return got
+        q, c = obs
+        if q == "B":
+            a, s = self.known.get(("A", c)), self.known.get(("S", c))
+            if a is not None and s is not None:
+                r = self.rel.get((a, s))
+                if r is not None:
+                    return r                               # the discovered factorization, applied
+        return self._guess(obs)
+
+    def update(self, obs, action, reward, next_obs, done):
+        if reward == 1:
+            self.known[obs] = action
+            q, c = obs
+            a, s, b = (self.known.get(("A", c)), self.known.get(("S", c)),
+                       self.known.get(("B", c)))
+            if a is not None and s is not None and b is not None:
+                self.rel[(a, s)] = b                       # one confirmed triple = one relation cell
+        else:
+            self.tried.setdefault(obs, set()).add(action)
 
     def episode_end(self):
         pass
@@ -1284,6 +1421,42 @@ def _selftest(verbose: bool = True) -> int:
           cc_do["aulc"] >= 0.35, f"aulc={cc_do['aulc']}")
     check("deepchain deep-vs-myopic separation on the CONSUMER draw (>=0.30)",
           cc_do["aulc"] - cc_dc["aulc"] >= 0.30, f"gap={cc_do['aulc'] - cc_dc['aulc']:.3f}")
+
+    # 15) EXTENSION family: factored (factored-structure discovery — the representation frontier).
+    #     Unlike compose, the structure is NOT in the observation's slots: opaque codes, and B's
+    #     answer factors through the A and S answers via a hidden per-instance relation. Positive
+    #     control = a relational reference that confirms answers by elimination, fills the relation
+    #     table from confirmed train triples, and answers NEVER-ASKED B questions by running the
+    #     discovered factorization (post ~0.999 measured). Displayed failure = the memorizer:
+    #     tabular-Q starts held-out B keys from scratch and only climbs by relearning (post ~0.51
+    #     measured — the small held-out keyspace relearns fast, so the separation bar is 0.30).
+    fa_seeds = [random.Random(4242).randrange(10**9) for _ in range(6)]
+    fa_post = lambda m: (sum(m["curve"][FACTORED_POST_SLICE:])
+                         / len(m["curve"][FACTORED_POST_SLICE:]))
+    fa_early = lambda m: (sum(m["curve"][FACTORED_POST_SLICE:FACTORED_EARLY_END])
+                          / (FACTORED_EARLY_END - FACTORED_POST_SLICE))
+    fa_r = measure_family(lambda a, s: RandomAgent(a, s), "factored", fa_seeds, agent_seed=99)
+    fa_q = measure_family(lambda a, s: TabularQAgent(a, s), "factored", fa_seeds, agent_seed=99)
+    fa_c = measure_family(lambda a, s: RelationalRefAgent(a, s), "factored", fa_seeds, agent_seed=99)
+    check("factored: random control flat (harness symmetric across the holdout switch)",
+          abs(fa_r["aulc"]) <= 0.10 and abs(fa_early(fa_r)) <= 0.10,
+          f"aulc={fa_r['aulc']} early={fa_early(fa_r):+.3f}")
+    check("factored: reference answers NEVER-ASKED B at once (EARLY slice >= 0.85; measured 0.97)",
+          fa_early(fa_c) >= 0.85, f"early={fa_early(fa_c):+.3f}")
+    check("factored: memorizer displayed on the ISOLATING slice (tabular-Q early <= 0.50; measured 0.35)",
+          fa_early(fa_q) <= 0.50, f"early={fa_early(fa_q):+.3f}")
+    check("factored: discovery-vs-memorizer separation unmistakable (>= 0.35 early)",
+          fa_early(fa_c) - fa_early(fa_q) >= 0.35, f"gap={fa_early(fa_c) - fa_early(fa_q):.3f}")
+    check("factored: reference holds the WHOLE post window too (post >= 0.85)",
+          fa_post(fa_c) >= 0.85, f"post={fa_post(fa_c):+.3f}")
+    fa_c2 = measure_family(lambda a, s: RelationalRefAgent(a, s), "factored", fa_seeds, agent_seed=99)
+    check("factored reproducibility (same seeds => identical)", fa_c == fa_c2)
+    for s in (11, 222, 3333):
+        env = FactoredRelationEnv(s)
+        covered = {(env.ansA[c], env.ansS[c]) for c in env.train_codes}
+        check(f"factored env-sanity :{s} (oracle > floor; train codes tile the relation domain)",
+              env.oracle_return > env.random_return and len(covered) == env.alphabet ** 2,
+              f"cells covered={len(covered)}/{env.alphabet ** 2}")
 
     # 7) certificate path (honest either way)
     if _HAS_ATTEST:
