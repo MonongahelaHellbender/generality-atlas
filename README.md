@@ -7,7 +7,7 @@
 This is an instrument, not an intelligence. It never claims to measure AGI (the one formal definition
 of general intelligence, Legg–Hutter universal intelligence, is provably uncomputable — that is a named
 barrier, not an engineering obstacle). What it measures, exactly: how fast an agent's performance
-climbs on task instances it has **never seen**, within a declared experience budget, across ten
+climbs on task instances it has **never seen**, within a declared experience budget, across eleven
 diagnostic families that each isolate one capability. Nothing beyond that declared universe is licensed.
 
 ## The design (reuse, not invention)
@@ -18,7 +18,8 @@ diagnostic families that each isolate one capability. Nothing beyond that declar
   jittered cadence (sustained adaptation) · three conflicting rules over shared symbols
   (interference resistance) · an N-step chain with reward only at the far end (deep exploration) ·
   hidden primitive bijections whose held-out compositions must be answered without relearning
-  (compositionality).
+  (compositionality) · opaque codes with a hidden functional dependency between question types that
+  must be discovered from behavior alone (factored-structure discovery).
 - **Procedural freshness** (Procgen's move): every instance is generated from a seed at run time.
   There is nothing to memorize; a memorizer is structurally reduced to its true learning ability.
 - **Metric names from the transfer-RL literature** (arXiv:2009.07888): jumpstart, AULC (area under
@@ -89,6 +90,16 @@ representation; deep exploration — eps-greedy fails exponentially), the same b
 only** (mean rises, floor pinned near zero by the unlearnable capabilities, `breadth_ratio` ≈ 0.1,
 `budget_to_floor` = `None`). More compute did not make it general — and the axis says so.
 
+## v1.4 — the eleven-family universe (fifth promotion: at a measured price of exactly zero)
+**factored** was promoted at a floor cost of **0.0000** — its whole-window score clears every
+holdout master's current floor binder, so the eleven-family floor equals the ten-family floor to
+four decimals. This is the discipline's cleanest arc end-to-end: the family was built as a
+referee; its verdict named the missing capability; the mechanism it prescribed was built and
+validated until the subject agent matched the family's own reference solver per draw; and only
+then was the family promoted — hold-as-referee-until-strength, then free expansion. (Compare
+v1.3's openly priced trade and v1.2's hold-then-promote: the promotion decision has now run in
+all three honest modes.)
+
 ## v1.3 — the ten-family universe (fourth promotion: priced in the open, not free)
 **compose** was promoted the same day it was built — the fastest referee-to-denominator arc yet,
 because the mechanism it existed to referee arrived within hours of its verdict. And unlike the
@@ -130,8 +141,8 @@ later — see those sections for the current universe.)
 
 ## v0.7 — extension families (the universe grows deliberately, not accidentally)
 `EXTENSION_FAMILIES` holds families that are **built, controlled, and measurable** but not yet in
-the default universe (five extensions promoted so far — one after a deliberate hold, one as an
-openly priced floor trade; family eleven, **factored**, now holds the slot) — because adding a family
+the default universe (all six extensions to date were promoted — one after a deliberate hold, one
+as an openly priced floor trade, one at exactly zero price; the slot is currently empty) — because adding a family
 re-baselines every existing number (the floor is a min; a new weakest family rewrites the headline).
 Promoting an extension into `FAMILIES` is an explicit re-versioning of the declared universe, made in
 the open.
@@ -192,8 +203,8 @@ at half the reference composer) and prescribed the compositional-licensing mecha
 cleared it — after which it was promoted as an openly priced trade (v1.3). The extension slot is
 empty; the natural next candidate is a family where factored structure itself must be discovered.
 
-## Extension in the slot: factored (factored-structure discovery)
-Family eleven, **factored** — the representation frontier the compose arc pointed at. In compose,
+## Family eleven: factored (factored-structure discovery) — promoted at price zero (v1.4)
+**factored** — the representation frontier the compose arc pointed at. In compose,
 the factored structure was handed to the agent syntactically (the observation's slots name the
 primitives being composed); here there are only **opaque codes** and three question types, and the
 structure exists purely in behavior: question B's answer is determined by the code's A and S
@@ -227,7 +238,7 @@ Any agent that speaks the protocol can be measured: `act(obs) -> action`,
 
 ## Claim-licensing ledger (how claims scale with evidence — open-ended by design)
 1. **Claims are licensed by the declared universe and the measured evidence — nothing more, at any
-   given time.** Today's universe (ten toy families, these budgets) licenses no claim about general
+   given time.** Today's universe (eleven toy families, these budgets) licenses no claim about general
    intelligence. That is a statement about today's evidence, not a ceiling on the project.
 2. **The path to bigger claims is declared expansion.** Grow the family universe, the budgets, the
    difficulty axes, the transfer measurements — and what may honestly be claimed grows exactly as

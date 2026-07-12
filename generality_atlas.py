@@ -5,7 +5,7 @@ must catch before it is allowed to measure anything.
 
 WHAT THIS IS (and is not): an instrument, not an intelligence. Generality here is operationalized as
 Chollet's skill-acquisition efficiency — how fast performance climbs on task instances the agent has
-NEVER seen, within a declared experience budget — measured across ten diagnostic families, each
+NEVER seen, within a declared experience budget — measured across eleven diagnostic families, each
 isolating ONE capability (bsuite's move), every instance procedurally generated fresh from a seed
 (Procgen's move: nothing to memorize), every score normalized against an analytic oracle and a random
 floor (no judge anywhere in the verdict path). The aggregate is the full profile plus the GENERALITY
@@ -562,22 +562,24 @@ FAMILIES = {
     "multirule":             (MultiRuleEnv,       "interference-resistance", 50),
     "deepchain":             (ChainEnv,           "deep-exploration",       60),
     "compose":               (CompositionEnv,     "compositionality",       40),
+    "factored":              (FactoredRelationEnv, "factored-structure-discovery", 40),
 }
+# v1.4 UNIVERSE (re-versioned 2026-07-11 night, fifth deliberate promotion): factored joined at a
+# measured price of EXACTLY ZERO — its whole-window AULC (0.62-0.66 on measure()'s own draws)
+# clears every master's current floor binder, so the eleven-family floor equals the ten-family
+# floor to four decimals (mean 0.5618). The discipline's cleanest arc: built as a referee, its
+# verdict prescribed the v10 mechanism, the mechanism cleared the family's own reference PER DRAW,
+# and only then was the family promoted — hold-as-referee-until-strength, then free expansion.
+# Eleven families, eleven capabilities. Appended LAST: incumbent instance draws unchanged.
 
 # EXTENSION families: built, controlled, and measurable via measure(families=[...]) — but NOT yet in
 # the default declared universe, because adding a family re-baselines EVERY existing number (the floor
 # is a min; a new weakest family rewrites the headline). Promoting an extension into FAMILIES is a
 # deliberate re-versioning of the universe, made in the open, not a side effect of adding code.
-# (all five prior extensions were promoted — one after a deliberate hold, one priced as an open
-# floor trade. Family eleven, factored, now holds the slot: built 2026-07-11 evening to referee
-# FACTORED-STRUCTURE DISCOVERY — unlike compose, where the factored structure was handed over in
-# the observation's slots, here the structure exists only in BEHAVIOR (a hidden functional
-# dependency between question types over opaque codes) and must be discovered to answer questions
-# that were never asked. Its verdict on the current seed decides v10; promotion is a separate
-# deliberate decision, as always.)
-EXTENSION_FAMILIES = {
-    "factored": (FactoredRelationEnv, "factored-structure-discovery", 40),
-}
+# (all six extensions to date were promoted — one after a deliberate hold, one as an openly priced
+# floor trade, one at exactly zero price after its mechanism cleared the reference; the slot is
+# empty. Natural next candidate: MULTI-STEP structure — plans, not answers.)
+EXTENSION_FAMILIES = {}
 
 
 def _family_spec(name):
@@ -1422,7 +1424,8 @@ def _selftest(verbose: bool = True) -> int:
     check("deepchain deep-vs-myopic separation on the CONSUMER draw (>=0.30)",
           cc_do["aulc"] - cc_dc["aulc"] >= 0.30, f"gap={cc_do['aulc'] - cc_dc['aulc']:.3f}")
 
-    # 15) EXTENSION family: factored (factored-structure discovery — the representation frontier).
+    # 15) factored (factored-structure discovery — PROMOTED into the default universe 2026-07-11
+    #     night, v1.4, at measured price zero after v10 cleared its reference).
     #     Unlike compose, the structure is NOT in the observation's slots: opaque codes, and B's
     #     answer factors through the A and S answers via a hidden per-instance relation. Positive
     #     control = a relational reference that confirms answers by elimination, fills the relation
