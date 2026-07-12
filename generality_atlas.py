@@ -527,6 +527,80 @@ class FactoredRelationEnv:
         return self._draw_round(), reward, self._t >= self.rounds
 
 
+# Conservative slices for the plan family (the factored family's tense discipline adopted
+# directly: the capability is executing WITHOUT relearning, so the isolating slice starts
+# immediately after the latest possible switch and ends before relearning can pay).
+PLAN_PRE_SLICE = 16          # curve[:16]   = training phase for all instances
+PLAN_POST_SLICE = 21         # curve[21:]   = held-out-pairs phase (switch drawn 18..20)
+PLAN_EARLY_END = 25          # curve[21:25] = the isolating slice
+
+
+class PlanEnv:
+    """MULTI-STEP structure — plans, not answers. Per-instance hidden CHORDS (2-action sequences
+    over the action alphabet); single rounds ask one chord (obs ('s', i, t, prev) — step index and
+    previous action keep the process Markov), composed rounds ask chord i THEN chord j
+    (obs ('c', i, j, t, prev), 4 steps). Capability: PLAN COMPOSITION — executing a multi-step
+    procedure whose parts were learned separately; the pair space splits per-instance and after a
+    randomized switch every round is a HELD-OUT pair, so a plan-composer chains two known chords
+    immediately while a memorizer faces the sequence space from scratch.
+
+    Two constructions carry proofs: NO ABORT on a wrong step (an abort would leak correctness
+    mid-round), and PROPORTIONAL PER-CHORD payment (single = 1.0 for its one chord, composed =
+    0.5 per chord) — each chord independently pays its weight times P(2 random steps correct), so
+    every round type's expected random return is EXACTLY alphabet**-2 and the normalization
+    carries zero phase bias (verified by the two-sided random control)."""
+    def __init__(self, seed: int, alphabet: int = 4, n_chords: int = 4, rounds: int = 6,
+                 switch_after: int | None = None):
+        rng = random.Random(seed)
+        self.alphabet, self.n_chords, self.rounds = alphabet, n_chords, rounds
+        self.chords = [(rng.randrange(alphabet), rng.randrange(alphabet))
+                       for _ in range(n_chords)]
+        pairs = [(i, j) for i in range(n_chords) for j in range(n_chords)]
+        rng.shuffle(pairs)
+        self.train_pairs = pairs[:len(pairs) // 2]
+        self.test_pairs = pairs[len(pairs) // 2:]
+        self.switch_after = switch_after if switch_after is not None else rng.randint(18, 20)
+        self.actions = list(range(alphabet))
+        self.oracle_return = float(rounds)
+        self.random_return = rounds / alphabet ** 2         # exact and phase-uniform (see above)
+        self._rng = random.Random(seed + 7)
+        self._episodes = 0
+
+    def _draw_round(self):
+        self._t = 0
+        self._prev = self.alphabet                          # sentinel: no previous action
+        self._steps_ok = []
+        if self._episodes <= self.switch_after and self._rng.random() < 0.5:
+            self._kind = ("s", self._rng.randrange(self.n_chords))
+            self._seq = self.chords[self._kind[1]]
+            return ("s", self._kind[1], 0, self._prev)
+        pool = self.train_pairs if self._episodes <= self.switch_after else self.test_pairs
+        i, j = pool[self._rng.randrange(len(pool))]
+        self._kind = ("c", i, j)
+        self._seq = self.chords[i] + self.chords[j]
+        return ("c", i, j, 0, self._prev)
+
+    def reset(self):
+        self._episodes += 1
+        self._round_no = 0
+        return self._draw_round()
+
+    def step(self, action):
+        self._steps_ok.append(action == self._seq[self._t])
+        reward = 0.0
+        if self._t % 2 == 1:                                # a chord boundary
+            if all(self._steps_ok[self._t - 1:self._t + 1]):
+                reward = 1.0 if self._kind[0] == "s" else 0.5
+        self._t += 1
+        self._prev = action
+        if self._t < len(self._seq):
+            head = self._kind + (self._t, self._prev)
+            return head, reward, False
+        self._round_no += 1
+        done = self._round_no >= self.rounds
+        return self._draw_round(), reward, done
+
+
 # family registry: name -> (constructor, capability tag, episodes budget)
 # Budget calibration is part of the instrument's validity (learned the hard way, 2026-07-09): the
 # memory family's original 25-episode budget was information-theoretically too tight — 5 cues x 5
@@ -576,10 +650,14 @@ FAMILIES = {
 # the default declared universe, because adding a family re-baselines EVERY existing number (the floor
 # is a min; a new weakest family rewrites the headline). Promoting an extension into FAMILIES is a
 # deliberate re-versioning of the universe, made in the open, not a side effect of adding code.
-# (all six extensions to date were promoted — one after a deliberate hold, one as an openly priced
-# floor trade, one at exactly zero price after its mechanism cleared the reference; the slot is
-# empty. Natural next candidate: MULTI-STEP structure — plans, not answers.)
-EXTENSION_FAMILIES = {}
+# (all six prior extensions were promoted — one after a deliberate hold, one as an openly priced
+# floor trade, one at exactly zero price after its mechanism cleared the reference. Family twelve,
+# plan, now holds the slot: MULTI-STEP structure — the answer is a SEQUENCE, and never-rehearsed
+# sequences must be executed by chaining procedures learned separately. Its verdict on the current
+# seed decides v11; promotion is a separate deliberate decision, as always.)
+EXTENSION_FAMILIES = {
+    "plan": (PlanEnv, "plan-composition", 40),
+}
 
 
 def _family_spec(name):
@@ -812,6 +890,59 @@ class CompositionalRefAgent:
             self.tried.setdefault(("c", i, j, x), set()).add(action)
             if y is not None:
                 self.tried.setdefault(("s", j, y), set()).add(action)
+
+    def episode_end(self):
+        pass
+
+
+class PlanRefAgent:
+    """POSITIVE-CONTROL reference for the plan family: learns each chord by systematic candidate
+    enumeration under end-of-chord reward (the per-chord payment makes elimination exact — a
+    boundary reward speaks only about that chord's two steps), then executes ANY pair, seen or
+    held-out, by chaining the two known chords. What the family exists to display: procedures
+    learned separately compose into never-rehearsed plans for free."""
+    def __init__(self, actions, seed: int):
+        self.actions = list(actions)
+        self._rng = random.Random(seed)
+        self.known = {}          # chord id -> (a0, a1), confirmed by a boundary reward
+        self.cand = {}           # chord id -> untried candidate sequences, per-instance order
+        self.trial = {}          # chord id -> the candidate being tried this round
+
+    def _slot(self, obs):
+        if obs[0] == "s":
+            return obs[1], obs[2] % 2
+        return (obs[1] if obs[3] < 2 else obs[2]), obs[3] % 2
+
+    def act(self, obs):
+        chord, pos = self._slot(obs)
+        got = self.known.get(chord)
+        if got is not None:
+            return got[pos]
+        if chord not in self.cand:
+            lst = [(a, b) for a in self.actions for b in self.actions]
+            self._rng.shuffle(lst)
+            self.cand[chord] = lst
+        if pos == 0 or chord not in self.trial:
+            self.trial[chord] = self.cand[chord][0]
+        return self.trial[chord][pos]
+
+    def update(self, obs, action, reward, next_obs, done):
+        t = obs[2] if obs[0] == "s" else obs[3]
+        if t % 2 != 1:
+            return
+        chord, _ = self._slot(obs)
+        if chord in self.known:
+            return
+        tr = self.trial.pop(chord, None)
+        if tr is None:
+            return
+        if reward > 0:
+            self.known[chord] = tr
+        else:
+            try:
+                self.cand[chord].remove(tr)
+            except ValueError:
+                pass
 
     def episode_end(self):
         pass
@@ -1460,6 +1591,37 @@ def _selftest(verbose: bool = True) -> int:
         check(f"factored env-sanity :{s} (oracle > floor; train codes tile the relation domain)",
               env.oracle_return > env.random_return and len(covered) == env.alphabet ** 2,
               f"cells covered={len(covered)}/{env.alphabet ** 2}")
+
+    # 16) EXTENSION family: plan (plan-composition — multi-step structure; the answer is a
+    #     SEQUENCE, and never-rehearsed sequences must be executed by chaining chords learned
+    #     separately). Positive control = a chord learner (per-chord payment makes candidate
+    #     elimination exact) that chains known chords on ANY pair — early slice 1.000 measured.
+    #     Displayed failure = the memorizer: tabular-Q faces the held-out sequence space from
+    #     scratch (early 0.056 measured). The proportional per-chord payment makes the random
+    #     floor EXACTLY phase-uniform (alphabet**-2 per round) — verified by the two-sided control.
+    pl_seeds = [random.Random(4242).randrange(10**9) for _ in range(6)]
+    pl_early = lambda m: (sum(m["curve"][PLAN_POST_SLICE:PLAN_EARLY_END])
+                          / (PLAN_EARLY_END - PLAN_POST_SLICE))
+    pl_r = measure_family(lambda a, s: RandomAgent(a, s), "plan", pl_seeds, agent_seed=99)
+    pl_q = measure_family(lambda a, s: TabularQAgent(a, s), "plan", pl_seeds, agent_seed=99)
+    pl_c = measure_family(lambda a, s: PlanRefAgent(a, s), "plan", pl_seeds, agent_seed=99)
+    check("plan: random control flat (phase-uniform floor construction verified, two-sided)",
+          abs(pl_r["aulc"]) <= 0.10 and abs(pl_early(pl_r)) <= 0.10,
+          f"aulc={pl_r['aulc']} early={pl_early(pl_r):+.3f}")
+    check("plan: chord-chaining reference executes NEVER-REHEARSED pairs at once (early >= 0.90)",
+          pl_early(pl_c) >= 0.90, f"early={pl_early(pl_c):+.3f}")
+    check("plan: memorizer displayed (tabular-Q early <= 0.30 — the sequence space from scratch)",
+          pl_early(pl_q) <= 0.30, f"early={pl_early(pl_q):+.3f}")
+    check("plan: composition-vs-memorizer separation unmistakable (>= 0.50 early)",
+          pl_early(pl_c) - pl_early(pl_q) >= 0.50, f"gap={pl_early(pl_c) - pl_early(pl_q):.3f}")
+    pl_c2 = measure_family(lambda a, s: PlanRefAgent(a, s), "plan", pl_seeds, agent_seed=99)
+    check("plan reproducibility (same seeds => identical)", pl_c == pl_c2)
+    for s in (11, 222, 3333):
+        env = PlanEnv(s)
+        check(f"plan env-sanity :{s}", env.oracle_return > env.random_return
+              and len(env.train_pairs) == 8 and len(env.test_pairs) == 8
+              and abs(env.random_return - env.rounds / env.alphabet ** 2) < 1e-12,
+              f"oracle={env.oracle_return} floor={env.random_return}")
 
     # 7) certificate path (honest either way)
     if _HAS_ATTEST:

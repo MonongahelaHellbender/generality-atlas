@@ -141,8 +141,9 @@ later — see those sections for the current universe.)
 
 ## v0.7 — extension families (the universe grows deliberately, not accidentally)
 `EXTENSION_FAMILIES` holds families that are **built, controlled, and measurable** but not yet in
-the default universe (all six extensions to date were promoted — one after a deliberate hold, one
-as an openly priced floor trade, one at exactly zero price; the slot is currently empty) — because adding a family
+the default universe (six extensions promoted so far — one after a deliberate hold, one as an
+openly priced floor trade, one at exactly zero price; family twelve, **plan**, now holds the
+slot) — because adding a family
 re-baselines every existing number (the floor is a min; a new weakest family rewrites the headline).
 Promoting an extension into `FAMILIES` is an explicit re-versioning of the declared universe, made in
 the open.
@@ -223,6 +224,19 @@ tabular-Q ~0.35. Functional-dependency discovery is a classic problem (reuse, no
 packaging is the referee protocol: control-derived isolating slice, planted memorizer display,
 controls gated before any measurement is trusted. It holds in the extension slot pending its referee verdict
 on the subject agent — promotion is a separate, deliberate re-versioning, as always.
+
+## Extension in the slot: plan (plan-composition)
+Family twelve, **plan** — multi-step structure: the answer is a SEQUENCE. Per-instance hidden
+chords (2-action sequences); single rounds ask one chord, composed rounds ask two chords in order,
+and after a randomized switch every round is a **held-out pair — a plan never rehearsed**. Two
+constructions carry proofs: no abort on a wrong step (aborts leak correctness mid-round), and
+proportional per-chord payment, which makes the random floor exactly phase-uniform (verified by
+the two-sided control) and makes candidate elimination exact for the built-in reference. That
+reference — learn each chord by enumeration, then chain known chords on any pair — reads 1.000 on
+the isolating early slice; tabular-Q reads 0.056 (the sequence space from scratch): the widest
+separation of any family (0.944). Options/macro-action composition is classic (reuse, not
+invention); the packaging is the referee protocol. It holds in the extension slot pending its
+referee verdict on the subject agent — promotion is a separate, deliberate re-versioning.
 
 ## Run (zero dependencies — Python standard library)
 ```
